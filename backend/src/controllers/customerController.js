@@ -1,14 +1,15 @@
-const customerModel = require("../models/customerModel");
+const activityService = require("../services/activityService");const customerModel = require("../models/customerModel");
 const financialMovementModel = require(
   "../models/financialMovementModel"
 );
 
 async function createCustomer(req, res) {
   try {
-    const { fullName, phone, createdBy } = req.body;
+const { name, phone, description } = req.body;
 
+const createdBy = req.user.id;
     // Validate required fields
-    if (!fullName || !fullName.trim()) {
+    if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
         message: "Customer name is required",
@@ -39,7 +40,7 @@ if (!familyMemberExists) {
 }
 
     const customer = await customerModel.createCustomer({
-      fullName: fullName.trim(),
+      fullName: name.trim(),
       phone,
       createdBy,
     });
@@ -51,7 +52,16 @@ if (!familyMemberExists) {
     });
   } catch (error) {
     console.error("Create customer error:", error);
-
+    await activityService.recordActivity({
+  actorId: Number(createdBy),
+  activityType: "CUSTOMER_CREATED",
+  entityType: "CUSTOMER",
+  entityId: customer.id,
+  description: `Customer ${customer.full_name} was created`,
+  metadata: {
+    customerId: customer.id,
+  },
+});
     return res.status(500).json({
       success: false,
       message: "Failed to create customer",

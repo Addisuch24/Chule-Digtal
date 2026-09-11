@@ -1,10 +1,11 @@
-const customerNoteModel = require("../models/customerNoteModel");
+ const activityService = require("../services/activityService");
+ const customerNoteModel = require("../models/customerNoteModel");
 const customerModel = require("../models/customerModel");
 async function createCustomerNote(req, res) {
   try {
     const { customerId } = req.params;
-    const { noteText, createdBy } = req.body;
-
+    const { noteText } = req.body;
+const createdBy = req.user.id;
     if (
       !Number.isInteger(Number(customerId)) ||
       Number(customerId) <= 0
@@ -56,6 +57,16 @@ if (!familyMemberExists) {
       message: "Customer note created successfully",
       data: note,
     });
+    await activityService.recordActivity({
+  actorId: Number(createdBy),
+  activityType: "CUSTOMER_NOTE_CREATED",
+  entityType: "CUSTOMER_NOTE",
+  entityId: note.id,
+  description: "Customer note was created",
+  metadata: {
+    customerId: Number(customerId),
+  },
+});
   } catch (error) {
     console.error("Create customer note error:", error);
 

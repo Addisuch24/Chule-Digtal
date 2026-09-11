@@ -5,11 +5,31 @@ async function createFinancialMovement({
   amount,
   movementType,
   description,
+    idempotencyKey, 
   referenceType,
   referenceId,
   recordedBy,
   transactionAt,
 }) {
+  if (idempotencyKey) {
+  const [existingRows] = await pool.execute(
+    `
+      SELECT *
+      FROM financial_movements
+      WHERE idempotency_key = ?
+      LIMIT 1
+    `,
+    [idempotencyKey]
+  );
+
+  if (existingRows.length > 0) {
+    return {
+      ...existingRows[0],
+      amount: Number(existingRows[0].amount),
+      duplicate: true,
+    };
+  }
+}
   const [result] = await pool.execute(
     `
       INSERT INTO financial_movements (
@@ -315,6 +335,49 @@ async function getCustomerBalance(customerId) {
     balance: totalDebit - totalCredit,
   };
 }
+async function getCustomerPayments(customerId) {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        f.id,
+        f.customer_id,
+        f.amount,
+        f.movement_type,
+        f.description,
+        f.reference_type,
+        f.reference_id,
+        f.idempotency_key,
+        f.recorded_by,
+        fm.full_name AS recorded_by_name,
+        f.verification_status,
+        f.verified_by,
+        verifier.full_name AS verified_by_name,
+        f.verified_at,
+        f.verification_note,
+        f.transaction_at,
+        f.created_at,
+        f.updated_at
+      FROM financial_movements f
+
+      JOIN family_members fm
+        ON fm.id = f.recorded_by
+
+      LEFT JOIN family_members verifier
+        ON verifier.id = f.verified_by
+
+      WHERE f.customer_id = ?
+        AND f.movement_type = 'CREDIT'
+
+      ORDER BY f.transaction_at DESC, f.id DESC
+    `,
+    [customerId]
+  );
+
+  return rows.map((payment) => ({
+    ...payment,
+    amount: Number(payment.amount),
+  }));
+}
 module.exports = {
   createFinancialMovement,
   getFinancialMovementById,
@@ -322,4 +385,6 @@ module.exports = {
   verifyFinancialMovement,
   rejectFinancialMovement,
   getCustomerBalance,
+  getCustomerPayments,
+  
 };

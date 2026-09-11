@@ -1,4 +1,4 @@
-const orderModel = require("../models/orderModel");
+const activityService = require("../services/activityService");const orderModel = require("../models/orderModel");
 const customerModel = require("../models/customerModel");
 
 async function createOrder(req, res) {
@@ -7,8 +7,9 @@ async function createOrder(req, res) {
     const {
       orderNumber,
       description,
-      takenBy,
+     
     } = req.body;
+    const  takenBy = req.user.id;
 
     if (
       !Number.isInteger(Number(customerId)) ||
@@ -74,8 +75,20 @@ if (!customer) {
     return res.status(201).json({
       success: true,
       message: "Order created successfully",
+      
       data: order,
     });
+    await activityService.recordActivity({
+  actorId: Number(takenBy),
+  activityType: "ORDER_CREATED",
+  entityType: "ORDER",
+  entityId: order.id,
+  description: `Order ${order.order_number} was created`,
+  metadata: {
+    customerId: Number(customerId),
+    orderNumber: order.order_number,
+  },
+});
   } catch (error) {
     console.error("Create order error:", error);
 
@@ -143,8 +156,8 @@ async function getAllOrders(req, res) {
 async function verifyOrder(req, res) {
   try {
     const { orderId } = req.params;
-    const { verifiedBy, verificationNote } = req.body;
-
+    const { verificationNote } = req.body;
+const verifiedBy = req.user.id;
     if (
       !Number.isInteger(Number(orderId)) ||
       Number(orderId) <= 0
@@ -202,6 +215,17 @@ async function verifyOrder(req, res) {
       message: "Order verified successfully",
       data: order,
     });
+    await activityService.recordActivity({
+  actorId: Number(verifiedBy),
+  activityType: "ORDER_VERIFIED",
+  entityType: "ORDER",
+  entityId: order.id,
+  description: `Order ${order.order_number} was verified`,
+  metadata: {
+    customerId: order.customer_id,
+    orderNumber: order.order_number,
+  },
+});
   } catch (error) {
     console.error("Verify order error:", error);
 
@@ -214,8 +238,8 @@ async function verifyOrder(req, res) {
 async function rejectOrder(req, res) {
   try {
     const { orderId } = req.params;
-    const { verifiedBy, verificationNote } = req.body;
-
+    const {verificationNote } = req.body;
+const verifiedBy = req.user.id;
     if (
       !Number.isInteger(Number(orderId)) ||
       Number(orderId) <= 0
@@ -283,6 +307,17 @@ async function rejectOrder(req, res) {
       message: "Order rejected successfully",
       data: order,
     });
+    await activityService.recordActivity({
+  actorId: Number(verifiedBy),
+  activityType: "ORDER_REJECTED",
+  entityType: "ORDER",
+  entityId: order.id,
+  description: `Order ${order.order_number} was rejected`,
+  metadata: {
+    customerId: order.customer_id,
+    orderNumber: order.order_number,
+  },
+});
   } catch (error) {
     console.error("Reject order error:", error);
 

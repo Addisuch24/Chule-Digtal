@@ -1,17 +1,21 @@
+
+const activityService = require("../services/activityService");
 const financialMovementModel = require("../models/financialMovementModel");
 
 async function createFinancialMovement(req, res) {
   try {
     const {
       customerId,
-      amount,
       movementType,
+      amount,
       description,
       referenceType,
       referenceId,
-      recordedBy,
       transactionAt,
+      idempotencyKey,
     } = req.body;
+
+    const recordedBy = req.user.id;
 
     // Validate customer ID
     if (
@@ -23,22 +27,24 @@ async function createFinancialMovement(req, res) {
         message: "customerId must be a valid customer ID",
       });
     }
-// Check that the customer exists
-const [customers] = await require("../config/db").execute(
-  `
-    SELECT id
-    FROM customers
-    WHERE id = ?
-  `,
-  [Number(customerId)]
-);
 
-if (customers.length === 0) {
-  return res.status(400).json({
-    success: false,
-    message: "Customer not found",
-  });
-}
+    // Check that the customer exists
+    const [customers] = await require("../config/db").execute(
+      `
+        SELECT id
+        FROM customers
+        WHERE id = ?
+      `,
+      [Number(customerId)]
+    );
+
+    if (customers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
     // Validate amount
     if (
       amount === undefined ||
@@ -62,14 +68,32 @@ if (customers.length === 0) {
       });
     }
 
-    // Validate recordedBy
+    // Validate authenticated family member
     if (
       !Number.isInteger(Number(recordedBy)) ||
       Number(recordedBy) <= 0
     ) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: "recordedBy must be a valid family member ID",
+        message: "Authenticated user is invalid",
+      });
+    }
+
+    // Check that authenticated family member exists and is active
+    const [familyMembers] = await require("../config/db").execute(
+      `
+        SELECT id
+        FROM family_members
+        WHERE id = ?
+          AND is_active = TRUE
+      `,
+      [Number(recordedBy)]
+    );
+
+    if (familyMembers.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated family member not found or inactive",
       });
     }
 
@@ -78,15 +102,36 @@ if (customers.length === 0) {
         customerId: Number(customerId),
         amount: Number(amount),
         movementType,
-        description,
-        referenceType,
+        description: description || null,
+        referenceType: referenceType || null,
         referenceId:
           referenceId === undefined || referenceId === null
             ? null
             : Number(referenceId),
+        idempotencyKey: idempotencyKey || null,
         recordedBy: Number(recordedBy),
-        transactionAt,
+        transactionAt: transactionAt || null,
       });
+
+    if (movement.duplicate) {
+      return res.status(200).json({
+        success: true,
+        message: "Financial movement already recorded",
+        data: movement,
+      });
+    }
+
+    await activityService.recordActivity({
+      actorId: Number(recordedBy),
+      activityType: "FINANCIAL_MOVEMENT_CREATED",
+      entityType: "FINANCIAL_MOVEMENT",
+      entityId: movement.id,
+      description: `Financial movement of ${movement.amount} birr was recorded`,
+      metadata: {
+        customerId: Number(customerId),
+        movementType,
+      },
+    });
 
     return res.status(201).json({
       success: true,
@@ -107,34 +152,15 @@ async function getFinancialMovementById(req, res) {
   try {
     const { movementId } = req.params;
 
-    // Validate recordedBy
-if (
-  !Number.isInteger(Number(recordedBy)) ||
-  Number(recordedBy) <= 0
-) {
-  return res.status(400).json({
-    success: false,
-    message: "recordedBy must be a valid family member ID",
-  });
-}
-
-// Check that the family member exists
-const [familyMembers] = await require("../config/db").execute(
-  `
-    SELECT id
-    FROM family_members
-    WHERE id = ?
-      AND is_active = TRUE
-  `,
-  [Number(recordedBy)]
-);
-
-if (familyMembers.length === 0) {
-  return res.status(400).json({
-    success: false,
-    message: "recordedBy family member not found or inactive",
-  });
-}
+    if (
+      !Number.isInteger(Number(movementId)) ||
+      Number(movementId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "movementId must be a valid movement ID",
+      });
+    }
 
     const movement =
       await financialMovementModel.getFinancialMovementById(
@@ -180,10 +206,13 @@ async function getAllFinancialMovements(req, res) {
     });
   }
 }
+
 async function verifyFinancialMovement(req, res) {
   try {
     const { movementId } = req.params;
-    const { verifiedBy, verificationNote } = req.body;
+    const { verificationNote } = req.body;
+
+    const verifiedBy = req.user.id;
 
     // Validate movement ID
     if (
@@ -196,18 +225,18 @@ async function verifyFinancialMovement(req, res) {
       });
     }
 
-    // Validate verifier
+    // Validate authenticated verifier
     if (
       !Number.isInteger(Number(verifiedBy)) ||
       Number(verifiedBy) <= 0
     ) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: "verifiedBy must be a valid family member ID",
+        message: "Authenticated user is invalid",
       });
     }
 
-    // Check that the family member exists and is active
+    // Check that verifier exists and is active
     const [familyMembers] = await require("../config/db").execute(
       `
         SELECT id
@@ -219,9 +248,9 @@ async function verifyFinancialMovement(req, res) {
     );
 
     if (familyMembers.length === 0) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: "verifiedBy family member not found or inactive",
+        message: "Authenticated family member not found or inactive",
       });
     }
 
@@ -251,6 +280,18 @@ async function verifyFinancialMovement(req, res) {
       });
     }
 
+    await activityService.recordActivity({
+      actorId: Number(verifiedBy),
+      activityType: "FINANCIAL_MOVEMENT_VERIFIED",
+      entityType: "FINANCIAL_MOVEMENT",
+      entityId: movement.id,
+      description: `Financial movement of ${movement.amount} birr was verified`,
+      metadata: {
+        customerId: movement.customer_id,
+        movementType: movement.movement_type,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: "Financial movement verified successfully",
@@ -265,10 +306,13 @@ async function verifyFinancialMovement(req, res) {
     });
   }
 }
+
 async function rejectFinancialMovement(req, res) {
   try {
     const { movementId } = req.params;
-    const { verifiedBy, verificationNote } = req.body;
+    const { verificationNote } = req.body;
+
+    const verifiedBy = req.user.id;
 
     // Validate movement ID
     if (
@@ -281,18 +325,18 @@ async function rejectFinancialMovement(req, res) {
       });
     }
 
-    // Validate verifier
+    // Validate authenticated verifier
     if (
       !Number.isInteger(Number(verifiedBy)) ||
       Number(verifiedBy) <= 0
     ) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: "verifiedBy must be a valid family member ID",
+        message: "Authenticated user is invalid",
       });
     }
 
-    // Check that the family member exists and is active
+    // Check that verifier exists and is active
     const [familyMembers] = await require("../config/db").execute(
       `
         SELECT id
@@ -304,9 +348,9 @@ async function rejectFinancialMovement(req, res) {
     );
 
     if (familyMembers.length === 0) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: "verifiedBy family member not found or inactive",
+        message: "Authenticated family member not found or inactive",
       });
     }
 
@@ -336,6 +380,18 @@ async function rejectFinancialMovement(req, res) {
       });
     }
 
+    await activityService.recordActivity({
+      actorId: Number(verifiedBy),
+      activityType: "FINANCIAL_MOVEMENT_REJECTED",
+      entityType: "FINANCIAL_MOVEMENT",
+      entityId: movement.id,
+      description: `Financial movement of ${movement.amount} birr was rejected`,
+      metadata: {
+        customerId: movement.customer_id,
+        movementType: movement.movement_type,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: "Financial movement rejected successfully",
@@ -350,6 +406,7 @@ async function rejectFinancialMovement(req, res) {
     });
   }
 }
+
 async function getCustomerBalance(req, res) {
   try {
     const { customerId } = req.params;
@@ -361,9 +418,10 @@ async function getCustomerBalance(req, res) {
       });
     }
 
-    const balance = await financialMovementModel.getCustomerBalance(
-      Number(customerId)
-    );
+    const balance =
+      await financialMovementModel.getCustomerBalance(
+        Number(customerId)
+      );
 
     return res.status(200).json({
       success: true,
@@ -378,11 +436,186 @@ async function getCustomerBalance(req, res) {
     });
   }
 }
+
+async function createPayment(req, res) {
+  try {
+    const {
+      customerId,
+      amount,
+      description,
+      referenceType,
+      referenceId,
+      idempotencyKey,
+      transactionAt,
+    } = req.body;
+
+    const recordedBy = req.user.id;
+
+    // Validate customer ID
+    if (
+      !Number.isInteger(Number(customerId)) ||
+      Number(customerId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId must be a valid customer ID",
+      });
+    }
+
+    // Validate amount
+    if (
+      amount === undefined ||
+      amount === null ||
+      Number.isNaN(Number(amount)) ||
+      Number(amount) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "amount must be greater than 0",
+      });
+    }
+
+    // Validate authenticated recorder
+    if (
+      !Number.isInteger(Number(recordedBy)) ||
+      Number(recordedBy) <= 0
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated user is invalid",
+      });
+    }
+
+    const db = require("../config/db");
+
+    // Check customer exists
+    const [customers] = await db.execute(
+      `
+        SELECT id
+        FROM customers
+        WHERE id = ?
+      `,
+      [Number(customerId)]
+    );
+
+    if (customers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    // Check authenticated family member exists and is active
+    const [familyMembers] = await db.execute(
+      `
+        SELECT id
+        FROM family_members
+        WHERE id = ?
+          AND is_active = TRUE
+      `,
+      [Number(recordedBy)]
+    );
+
+    if (familyMembers.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated family member not found or inactive",
+      });
+    }
+
+    const payment =
+      await financialMovementModel.createFinancialMovement({
+        customerId: Number(customerId),
+        amount: Number(amount),
+        movementType: "CREDIT",
+        description: description || null,
+        referenceType: referenceType || null,
+        referenceId:
+          referenceId === undefined || referenceId === null
+            ? null
+            : Number(referenceId),
+        idempotencyKey: idempotencyKey || null,
+        recordedBy: Number(recordedBy),
+        transactionAt: transactionAt || null,
+      });
+
+    if (payment.duplicate) {
+      return res.status(200).json({
+        success: true,
+        message: "Payment already recorded",
+        data: payment,
+      });
+    }
+
+    await activityService.recordActivity({
+      actorId: Number(recordedBy),
+      activityType: "PAYMENT_RECORDED",
+      entityType: "FINANCIAL_MOVEMENT",
+      entityId: payment.id,
+      description: `Payment of ${payment.amount} birr was recorded`,
+      metadata: {
+        customerId: Number(customerId),
+        movementType: "CREDIT",
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Payment recorded successfully",
+      data: payment,
+    });
+  } catch (error) {
+    console.error("Create payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to record payment",
+    });
+  }
+}
+
+async function getCustomerPayments(req, res) {
+  try {
+    const { customerId } = req.params;
+
+    if (
+      !Number.isInteger(Number(customerId)) ||
+      Number(customerId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId must be a valid customer ID",
+      });
+    }
+
+    const payments =
+      await financialMovementModel.getCustomerPayments(
+        Number(customerId)
+      );
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer payment history retrieved successfully",
+      data: payments,
+    });
+  } catch (error) {
+    console.error("Get customer payments error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to retrieve customer payment history",
+    });
+  }
+}
+
 module.exports = {
   createFinancialMovement,
   getFinancialMovementById,
   getAllFinancialMovements,
   verifyFinancialMovement,
   rejectFinancialMovement,
-    getCustomerBalance,
- };
+  getCustomerBalance,
+  createPayment,
+  getCustomerPayments,
+};
+
