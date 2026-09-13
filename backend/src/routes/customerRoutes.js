@@ -1,14 +1,28 @@
-const express = require("express");
+ const express = require("express");
+
 const customerController = require("../controllers/customerController");
 const { authenticateToken } = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
-router.post("/", customerController.createCustomer);
-router.get("/", customerController.getAllCustomers);
 router.use(authenticateToken);
-router.get("/:customerId", customerController.getCustomerById);
+
+// Create customer
+router.post("/", customerController.createCustomer);
+
+// Get all customers
+router.get("/", customerController.getAllCustomers);
+
+// Get customer balance
 router.get(
   "/:customerId/balance",
   customerController.getCustomerBalance
 );
+
+// Get one customer
+router.get(
+  "/:customerId",
+  customerController.getCustomerById
+);
+
 module.exports = router;

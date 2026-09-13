@@ -16,6 +16,7 @@ router.get(
   "/",
   orderController.getAllOrders
 );
+router.get("/:orderId", orderController.getOrderById);
 router.patch(
   "/:orderId/verify",
   orderController.verifyOrder
@@ -24,7 +25,7 @@ router.patch(
   "/:orderId/reject",
   orderController.rejectOrder
 );
-router.patch(
+ router.patch(
   "/:orderId/status",
   orderController.updateOrderStatus
 );

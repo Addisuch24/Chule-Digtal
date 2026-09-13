@@ -1,48 +1,61 @@
-const activityService = require("../services/activityService");const customerModel = require("../models/customerModel");
+ const activityService = require("../services/activityService");
+const customerModel = require("../models/customerModel");
 const financialMovementModel = require(
   "../models/financialMovementModel"
 );
 
 async function createCustomer(req, res) {
   try {
-const { name, phone, description } = req.body;
+    const { full_name, phone } = req.body;
 
-const createdBy = req.user.id;
-    // Validate required fields
-    if (!name || !name.trim()) {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const createdBy = Number(req.user.id);
+
+    if (!full_name || !full_name.trim()) {
       return res.status(400).json({
         success: false,
         message: "Customer name is required",
       });
     }
 
-    if (!createdBy) {
+    if (!Number.isInteger(createdBy) || createdBy <= 0) {
       return res.status(400).json({
         success: false,
-        message: "createdBy is required",
+        message: "Invalid family member ID",
       });
     }
-    if (!Number.isInteger(Number(createdBy)) || Number(createdBy) <= 0) {
-  return res.status(400).json({
-    success: false,
-    message: "createdBy must be a valid family member ID",
-  });
-}
-const familyMemberExists = await customerModel.familyMemberExists(
-  Number(createdBy)
-);
 
-if (!familyMemberExists) {
-  return res.status(400).json({
-    success: false,
-    message: "Family member not found or inactive",
-  });
-}
+    const familyMemberExists =
+      await customerModel.familyMemberExists(createdBy);
+
+    if (!familyMemberExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Family member not found or inactive",
+      });
+    }
 
     const customer = await customerModel.createCustomer({
-      fullName: name.trim(),
-      phone,
+      fullName: full_name.trim(),
+      phone: phone || null,
       createdBy,
+    });
+
+    await activityService.recordActivity({
+      actorId: createdBy,
+      activityType: "CUSTOMER_CREATED",
+      entityType: "CUSTOMER",
+      entityId: customer.id,
+      description: `Customer ${customer.full_name} was created`,
+      metadata: {
+        customerId: customer.id,
+      },
     });
 
     return res.status(201).json({
@@ -52,23 +65,15 @@ if (!familyMemberExists) {
     });
   } catch (error) {
     console.error("Create customer error:", error);
-    await activityService.recordActivity({
-  actorId: Number(createdBy),
-  activityType: "CUSTOMER_CREATED",
-  entityType: "CUSTOMER",
-  entityId: customer.id,
-  description: `Customer ${customer.full_name} was created`,
-  metadata: {
-    customerId: customer.id,
-  },
-});
+
     return res.status(500).json({
       success: false,
       message: "Failed to create customer",
     });
   }
 }
- async function getCustomerById(req, res) {
+
+async function getCustomerById(req, res) {
   try {
     const { customerId } = req.params;
 
@@ -119,7 +124,8 @@ if (!familyMemberExists) {
     });
   }
 }
- async function getAllCustomers(req, res) {
+
+async function getAllCustomers(req, res) {
   try {
     const customers = await customerModel.getAllCustomers();
 
@@ -137,6 +143,7 @@ if (!familyMemberExists) {
     });
   }
 }
+
 async function getCustomerBalance(req, res) {
   try {
     const { customerId } = req.params;
@@ -165,9 +172,10 @@ async function getCustomerBalance(req, res) {
     });
   }
 }
+
 module.exports = {
   createCustomer,
   getCustomerById,
   getAllCustomers,
   getCustomerBalance,
- };
+};
