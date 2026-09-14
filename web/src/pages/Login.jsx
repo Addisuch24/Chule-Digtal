@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import socket from "../services/socket";
 
 function Login() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ function Login() {
       // Save JWT token
       localStorage.setItem("token", loginData.token);
 
-      // Save logged-in user
+      // Save user information
       if (loginData.user) {
         localStorage.setItem(
           "user",
@@ -44,14 +45,39 @@ function Login() {
         );
       }
 
-      // Verify token was actually saved
       console.log(
         "Token saved:",
         Boolean(localStorage.getItem("token"))
       );
 
-      // Go to protected dashboard
-      navigate("/dashboard", { replace: true });
+      // Update Socket.IO authentication
+      socket.auth = {
+        token: loginData.token,
+      };
+
+      // Connect real-time socket
+      if (!socket.connected) {
+        socket.connect();
+      }
+
+      socket.once("connect", () => {
+        console.log(
+          "Socket.IO connected:",
+          socket.id
+        );
+      });
+
+      socket.once("connect_error", (socketError) => {
+        console.error(
+          "Socket.IO connection error:",
+          socketError.message
+        );
+      });
+
+      // Go to dashboard
+      navigate("/dashboard", {
+        replace: true,
+      });
     } catch (requestError) {
       console.error("Login error:", requestError);
 
@@ -82,7 +108,8 @@ function Login() {
           padding: "30px",
           backgroundColor: "#ffffff",
           borderRadius: "10px",
-          boxShadow: "0 4px 15px rgba(0, 0, 0, 0.08)",
+          boxShadow:
+            "0 4px 15px rgba(0, 0, 0, 0.08)",
         }}
       >
         <h1>Chule Digita</h1>
@@ -166,7 +193,9 @@ function Login() {
                 : "pointer",
             }}
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading
+              ? "Logging in..."
+              : "Login"}
           </button>
         </form>
       </div>

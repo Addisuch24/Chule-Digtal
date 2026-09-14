@@ -28,7 +28,7 @@ function authenticateToken(req, res, next) {
     );
 
     req.user = {
-      id: decoded.userId,
+      id: decoded.id ?? decoded.userId,
       username: decoded.username,
     };
 

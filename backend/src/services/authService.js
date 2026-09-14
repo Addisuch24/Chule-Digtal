@@ -4,20 +4,22 @@ const jwt = require("jsonwebtoken");
 const authModel = require("../models/authModel");
 
 async function login(username, password) {
-  const member =
-    await authModel.findFamilyMemberByUsername(username);
+  const user =
+    await authModel.findFamilyMemberByUsername(
+      username
+    );
 
-  if (!member) {
+  if (!user) {
     return null;
   }
 
-  if (!member.is_active) {
+  if (!user.is_active) {
     return null;
   }
 
   const passwordMatches = await bcrypt.compare(
     password,
-    member.password_hash
+    user.password_hash
   );
 
   if (!passwordMatches) {
@@ -26,31 +28,72 @@ async function login(username, password) {
 
   const token = jwt.sign(
     {
-      userId: member.id,
-      username: member.username,
+      id: user.id,
+      username: user.username,
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+      expiresIn:
+        process.env.JWT_EXPIRES_IN || "7d",
     }
   );
 
   return {
     token,
+
     user: {
-      id: member.id,
-      fullName: member.full_name,
-      phone: member.phone,
-      username: member.username,
+      id: user.id,
+      full_name: user.full_name,
+      phone: user.phone,
+      username: user.username,
+      is_active: user.is_active,
     },
   };
 }
 
-async function getUserById(userId) {
-  return authModel.findFamilyMemberById(userId);
+async function register(
+  fullName,
+  phone,
+  username,
+  password
+) {
+  const existingUser =
+    await authModel.findFamilyMemberByUsername(
+      username
+    );
+
+  if (existingUser) {
+    const error = new Error(
+      "Username already exists"
+    );
+
+    error.code = "USERNAME_EXISTS";
+
+    throw error;
+  }
+
+  const passwordHash = await bcrypt.hash(
+    password,
+    10
+  );
+
+  const userId =
+    await authModel.createFamilyMember(
+      fullName,
+      phone,
+      username,
+      passwordHash
+    );
+
+  const createdUser =
+    await authModel.findFamilyMemberById(
+      userId
+    );
+
+  return createdUser;
 }
 
 module.exports = {
   login,
-  getUserById,
+  register,
 };

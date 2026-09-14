@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import socket from "../services/socket";
 
 function formatDate(dateValue) {
   if (!dateValue) return "-";
@@ -16,48 +17,122 @@ function Notifications() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const user = JSON.parse(localStorage.getItem("user") || "null");
+async function loadNotifications() {
+  try {
+    const storedUser = localStorage.getItem("user");
 
-  const userId = user?.id;
-
-  async function loadNotifications() {
-    try {
-      setLoading(true);
-      setError("");
-
-      if (!userId) {
-        setError("User information not found. Please login again.");
-        return;
-      }
-
-      const response = await api.get(
-        `/notifications/recipient/${userId}`
-      );
-
-      const notificationData =
-        response.data?.data ||
-        response.data?.notifications ||
-        [];
-
-      setNotifications(
-        Array.isArray(notificationData)
-          ? notificationData
-          : []
-      );
-    } catch (requestError) {
-      console.error("Notifications loading error:", requestError);
-
-      setError(
-        requestError.response?.data?.message ||
-          "Failed to load notifications."
-      );
-    } finally {
-      setLoading(false);
+    if (!storedUser) {
+      setError("User information is missing. Please login again.");
+      return;
     }
+
+    const user = JSON.parse(storedUser);
+    const userId = user?.id;
+
+    if (!userId) {
+      setError("Valid user ID is missing. Please login again.");
+      return;
+    }
+
+    const response = await api.get(
+      `/notifications/recipient/${userId}`
+    );
+
+    setNotifications(response.data?.data || []);
+  } catch (error) {
+    console.error("Load notifications error:", error);
+
+    setError(
+      error.response?.data?.message ||
+        "Failed to load notifications"
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+
+ useEffect(() => {
+  function handleSocketConnect() {
+    console.log("Notifications socket connected:", socket.id);
   }
 
+  function handleSocketDisconnect(reason) {
+    console.log("Notifications socket disconnected:", reason);
+  }
+
+ function handleNewNotification(notification) {
+  console.log(
+    "REAL-TIME NOTIFICATION RECEIVED:",
+    notification
+  );
+
+  console.log(
+    "REAL-TIME NOTIFICATION JSON:",
+    JSON.stringify(notification, null, 2)
+  );
+
+  const safeNotification = {
+    id: notification?.id ?? Date.now(),
+    title: notification?.title ?? "New notification",
+    message:
+      notification?.message ??
+      notification?.description ??
+      "A new activity was recorded.",
+    is_read:
+      notification?.is_read ??
+      notification?.isRead ??
+      false,
+    created_at:
+      notification?.created_at ??
+      notification?.createdAt ??
+      new Date().toISOString(),
+  };
+
+  setNotifications((previousNotifications) => [
+    safeNotification,
+    ...previousNotifications,
+  ]);
+}
+
+  socket.on("connect", handleSocketConnect);
+  socket.on("disconnect", handleSocketDisconnect);
+  socket.on("notification:new", handleNewNotification);
+
+  if (!socket.connected) {
+    socket.connect();
+  }
+
+  return () => {
+    socket.off("connect", handleSocketConnect);
+    socket.off("disconnect", handleSocketDisconnect);
+    socket.off("notification:new", handleNewNotification);
+  };
+}, []);
+
   useEffect(() => {
-    loadNotifications();
+ function handleNewNotification(notification) {
+  console.log(
+    "REAL-TIME NOTIFICATION RECEIVED:",
+    JSON.stringify(notification, null, 2)
+  );
+
+  setNotifications((previousNotifications) => [
+    notification,
+    ...previousNotifications,
+  ]);
+}
+
+    socket.on(
+      "notification:new",
+      handleNewNotification
+    );
+
+    return () => {
+      socket.off(
+        "notification:new",
+        handleNewNotification
+      );
+    };
   }, []);
 
   async function markAsRead(notificationId) {
@@ -73,7 +148,10 @@ function Notifications() {
 
       await loadNotifications();
     } catch (requestError) {
-      console.error("Mark notification read error:", requestError);
+      console.error(
+        "Mark notification read error:",
+        requestError
+      );
 
       setError(
         requestError.response?.data?.message ||
@@ -96,7 +174,7 @@ function Notifications() {
       <h2>Notifications</h2>
 
       <p>
-        View updates from other family members.
+        View updates from other family members in real time.
       </p>
 
       {message && (
