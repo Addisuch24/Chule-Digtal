@@ -1,157 +1,214 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import api from "../services/api";
-function formatNoteDate(dateValue) {
-  const date = new Date(dateValue);
+import FeedbackState from "../components/FeedbackState";
+import PageHeader from "../components/PageHeader";
 
-  const dayName = date.toLocaleDateString("en-US", {
-    weekday: "long",
-  });
+const formatDate = (value) =>
+  value
+    ? new Date(value).toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "Date unavailable";
 
-  const day = date.getDate();
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
-
-  const time = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-
-  return {
-    date: `${dayName}, ${day}/${month}/${year}`,
-    time,
-  };
-}
 function CustomerDetails() {
-    
   const { customerId } = useParams();
-
   const [customer, setCustomer] = useState(null);
   const [notes, setNotes] = useState([]);
+  const [noteText, setNoteText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-const [noteText, setNoteText] = useState("");
-const [message, setMessage] = useState("");
-async function handleAddNote(event) {
-  event.preventDefault();
+  const [message, setMessage] = useState("");
 
-  setMessage("");
-  setError("");
-
-  try {
-    await api.post(
-  `/customers/${customerId}/notes`,
-  {
-    note_text: noteText,
-  }
-);
-
-    setMessage("Note added successfully!");
-    setNoteText("");
-
-    const notesResponse = await api.get(
-      `/customers/${customerId}/notes`
-    );
-
-    setNotes(notesResponse.data.data);
-  } catch (error) {
-    setError(
-      error.response?.data?.message ||
-        "Failed to add note"
-    );
-  }
-}
-  useEffect(() => {
-    async function loadCustomer() {
-      try {
-        const customerResponse = await api.get(
-          `/customers/${customerId}`
-        );
-
-        setCustomer(customerResponse.data.data);
-
-        const notesResponse = await api.get(
-          `/customers/${customerId}/notes`
-        );
-
-        setNotes(notesResponse.data.data);
-      } catch (error) {
-        setError(
-          error.response?.data?.message ||
-            "Failed to load customer"
-        );
-      }
+  const loadCustomerData = useCallback(async (showSpinner = false) => {
+    if (!customerId || customerId === "undefined") {
+      setError("Customer ID is missing.");
+      setLoading(false);
+      return;
     }
+    try {
+      if (showSpinner) setLoading(true);
+      setError("");
+      const [customerResponse, notesResponse] = await Promise.all([
+        api.get(`/customers/${customerId}`),
+        api.get(`/customers/${customerId}/notes`).catch((err) => {
+          console.warn("Could not load customer notes:", err);
+          return { data: { data: [] } };
+        }),
+      ]);
 
-    loadCustomer();
+      const customerData = customerResponse.data?.data || null;
+      setCustomer(customerData);
+
+      const notesData = Array.isArray(notesResponse.data?.data)
+        ? notesResponse.data.data
+        : [];
+      setNotes(notesData);
+    } catch (requestError) {
+      console.error("Load customer details error:", requestError);
+      setError(
+        requestError.response?.data?.message || "We could not load this customer."
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [customerId]);
 
-  if (error) {
-    return <p>{error}</p>;
+  useEffect(() => {
+    loadCustomerData(false);
+  }, [loadCustomerData]);
+
+  async function handleAddNote(event) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    if (!noteText.trim()) {
+      setError("Please write a note before saving.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await api.post(`/customers/${customerId}/notes`, {
+        note_text: noteText.trim(),
+      });
+      setNoteText("");
+      setMessage("Note added successfully.");
+      await loadCustomerData();
+    } catch (requestError) {
+      console.error("Add note error:", requestError);
+      setError(
+        requestError.response?.data?.message || "We could not save that note."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (!customer) {
-    return <p>Loading customer...</p>;
-  }
+  if (loading) return <FeedbackState type="loading" title="Loading customer profile..." />;
+  if (error && !customer)
+    return (
+      <FeedbackState
+        type="error"
+        title="Customer unavailable"
+        message={error}
+        action={
+          <button type="button" onClick={loadCustomerData}>
+            Try again
+          </button>
+        }
+      />
+    );
+  if (!customer)
+    return (
+      <FeedbackState
+        title="Customer not found"
+        message="This customer record may have been removed or the link is incorrect."
+        action={
+          <Link className="button button-secondary" to="/customers">
+            Back to customers
+          </Link>
+        }
+      />
+    );
 
   return (
-    <div>
-      <Link to="/customers">← Back to Customers</Link>
-
-      <h2>{customer.full_name}</h2>
-
-      <p>
-        <strong>Phone:</strong>{" "}
-        {customer.phone || "N/A"}
-      </p>
-
-      <p>
-        <strong>Balance:</strong>{" "}
-        {customer.balance}
-      </p>
-
-      <hr />
-<h3>Add Note</h3>
-
-<form onSubmit={handleAddNote}>
-  <textarea
-    value={noteText}
-    onChange={(event) =>
-      setNoteText(event.target.value)
-    }
-    placeholder="Write customer note..."
-    required
-  />
-
-  <br />
-
-  <button type="submit">
-    Save Note
-  </button>
-</form>
-
-{message && <p>{message}</p>}
-      <h3>Customer Notes</h3>
-
-      {notes.length === 0 ? (
-        <p>No notes found.</p>
-      ) : (
-        notes.map((note) => (
-          <div key={note.id}>
-<p>
-  {note.note ||
-    note.description ||
-    note.note_text ||
-    "Note text unavailable"}
-</p>            <small>
-              Created: {formatNoteDate(note.created_at).date} at {formatNoteDate(note.created_at).time}
-            </small>
-            <hr />
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="Customer profile"
+        title={customer.full_name || "Customer"}
+        description={customer.phone || "No phone number has been added"}
+        action={
+          <Link className="button button-secondary" to="/customers">
+            Back to customers
+          </Link>
+        }
+      />
+      <section className="profile-summary panel">
+        <div className="profile-summary-main">
+          <span className="profile-large-avatar">
+            {(customer.full_name || "C").charAt(0).toUpperCase()}
+          </span>
+          <div>
+            <p className="eyebrow">Customer #{customer.id}</p>
+            <h2>{customer.full_name || "Unnamed customer"}</h2>
+            <p>{customer.phone || "No phone number"}</p>
           </div>
-        ))
-      )}
+        </div>
+        <div className="profile-balance">
+          <span>Current balance</span>
+          <strong>{Number(customer.balance || 0).toLocaleString("en-US")} ETB</strong>
+          <small>Verified balance</small>
+        </div>
+      </section>
+
+      <div className="action-row">
+        <Link className="button" to={`/orders?customerId=${customer.id}`}>
+          Create order <span aria-hidden="true">-&gt;</span>
+        </Link>
+        <Link
+          className="button button-secondary"
+          to={`/finance?customerId=${customer.id}`}
+        >
+          Record financial movement
+        </Link>
+      </div>
+
+      {error && <p className="alert alert-error">{error}</p>}
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Shared context</p>
+            <h2>Customer notes ({notes.length})</h2>
+          </div>
+          <span className="muted">Visible to the whole family team</span>
+        </div>
+
+        <form className="form-stack" onSubmit={handleAddNote}>
+          <label className="field-label" htmlFor="noteText">
+            Add a note
+            <textarea
+              id="noteText"
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              placeholder="Write something useful for the next family member..."
+              rows="3"
+              required
+            />
+          </label>
+          <div>
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Saving..." : "Save note"}
+            </button>
+          </div>
+        </form>
+
+        {message && <p className="alert alert-success">{message}</p>}
+
+        <div className="notes-list" style={{ marginTop: "1.5rem" }}>
+          {notes.length === 0 ? (
+            <FeedbackState
+              title="No notes yet"
+              message="Add the first note to keep useful context close to the customer record."
+            />
+          ) : (
+            notes.map((note) => (
+              <article className="note-card" key={note.id}>
+                <p>{note.note_text || note.note || note.description || "Note text unavailable"}</p>
+                <small>
+                  By {note.created_by_name || note.author_name || note.creator_name || "Family member"} ·{" "}
+                  {formatDate(note.created_at)}
+                </small>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
 
 export default CustomerDetails;
+

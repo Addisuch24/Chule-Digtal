@@ -67,15 +67,15 @@ async function getDashboardSummary(req, res) {
       },
 
       recentActivities: Array.isArray(
-        summary.recentActivities
+        summary.recentActivities || summary.activities?.recent
       )
-        ? summary.recentActivities
+        ? summary.recentActivities || summary.activities.recent
         : [],
 
       recentOrders: Array.isArray(
-        summary.recentOrders
+        summary.recentOrders || summary.activities?.recentOrders
       )
-        ? summary.recentOrders
+        ? summary.recentOrders || summary.activities.recentOrders
         : [],
     };
 

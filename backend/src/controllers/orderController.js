@@ -72,23 +72,24 @@ if (!customer) {
       takenBy: Number(takenBy),
     });
 
+    await activityService.recordActivity({
+      actorId: Number(takenBy),
+      activityType: "ORDER_CREATED",
+      entityType: "ORDER",
+      entityId: order.id,
+      description: `Order ${order.order_number} was created`,
+      metadata: {
+        customerId: Number(customerId),
+        orderNumber: order.order_number,
+      },
+    });
+
     return res.status(201).json({
       success: true,
       message: "Order created successfully",
       
       data: order,
     });
-    await activityService.recordActivity({
-  actorId: Number(takenBy),
-  activityType: "ORDER_CREATED",
-  entityType: "ORDER",
-  entityId: order.id,
-  description: `Order ${order.order_number} was created`,
-  metadata: {
-    customerId: Number(customerId),
-    orderNumber: order.order_number,
-  },
-});
   } catch (error) {
     console.error("Create order error:", error);
 
@@ -210,22 +211,23 @@ const verifiedBy = req.user.id;
       });
     }
 
+    await activityService.recordActivity({
+      actorId: Number(verifiedBy),
+      activityType: "ORDER_VERIFIED",
+      entityType: "ORDER",
+      entityId: order.id,
+      description: `Order ${order.order_number} was verified`,
+      metadata: {
+        customerId: order.customer_id,
+        orderNumber: order.order_number,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: "Order verified successfully",
       data: order,
     });
-    await activityService.recordActivity({
-  actorId: Number(verifiedBy),
-  activityType: "ORDER_VERIFIED",
-  entityType: "ORDER",
-  entityId: order.id,
-  description: `Order ${order.order_number} was verified`,
-  metadata: {
-    customerId: order.customer_id,
-    orderNumber: order.order_number,
-  },
-});
   } catch (error) {
     console.error("Verify order error:", error);
 
@@ -302,22 +304,23 @@ const verifiedBy = req.user.id;
       });
     }
 
+    await activityService.recordActivity({
+      actorId: Number(verifiedBy),
+      activityType: "ORDER_REJECTED",
+      entityType: "ORDER",
+      entityId: order.id,
+      description: `Order ${order.order_number} was rejected`,
+      metadata: {
+        customerId: order.customer_id,
+        orderNumber: order.order_number,
+      },
+    });
+
     return res.status(200).json({
       success: true,
       message: "Order rejected successfully",
       data: order,
     });
-    await activityService.recordActivity({
-  actorId: Number(verifiedBy),
-  activityType: "ORDER_REJECTED",
-  entityType: "ORDER",
-  entityId: order.id,
-  description: `Order ${order.order_number} was rejected`,
-  metadata: {
-    customerId: order.customer_id,
-    orderNumber: order.order_number,
-  },
-});
   } catch (error) {
     console.error("Reject order error:", error);
 

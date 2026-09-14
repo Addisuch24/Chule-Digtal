@@ -1,206 +1,247 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
-import socket from "../services/socket";
+import { connectSocket } from "../services/socket";
 
 function Login() {
   const navigate = useNavigate();
-
+  const [mode, setMode] = useState("login"); // 'login' | 'register'
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  function switchMode(newMode) {
+    setMode(newMode);
+    setError("");
+    setSuccessMessage("");
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
-
     setError("");
-    setLoading(true);
+    setSuccessMessage("");
 
-    try {
-      const response = await api.post("/auth/login", {
-        username: username.trim(),
-        password,
-      });
-
-      console.log("Login response:", response.data);
-
-      const loginData = response.data?.data;
-
-      if (!loginData?.token) {
-        throw new Error(
-          "Login succeeded but no authentication token was returned."
-        );
+    if (mode === "login") {
+      if (!username.trim() || !password) {
+        setError("Enter your username and password to continue.");
+        return;
       }
-
-      // Save JWT token
-      localStorage.setItem("token", loginData.token);
-
-      // Save user information
-      if (loginData.user) {
-        localStorage.setItem(
-          "user",
-          JSON.stringify(loginData.user)
+      setLoading(true);
+      try {
+        const response = await api.post("/auth/login", {
+          username: username.trim(),
+          password,
+        });
+        const loginData = response.data?.data;
+        if (!loginData?.token) {
+          throw new Error("Login succeeded but no authentication token was returned.");
+        }
+        localStorage.setItem("token", loginData.token);
+        if (loginData.user) {
+          localStorage.setItem("user", JSON.stringify(loginData.user));
+        }
+        connectSocket();
+        navigate("/dashboard", { replace: true });
+      } catch (requestError) {
+        console.error("Login error:", requestError);
+        setError(
+          requestError.response?.data?.message ||
+            "Login failed. Check your username and password."
         );
+      } finally {
+        setLoading(false);
       }
-
-      console.log(
-        "Token saved:",
-        Boolean(localStorage.getItem("token"))
-      );
-
-      // Update Socket.IO authentication
-      socket.auth = {
-        token: loginData.token,
-      };
-
-      // Connect real-time socket
-      if (!socket.connected) {
-        socket.connect();
+    } else {
+      if (!fullName.trim()) {
+        setError("Full name is required.");
+        return;
       }
-
-      socket.once("connect", () => {
-        console.log(
-          "Socket.IO connected:",
-          socket.id
+      if (!username.trim()) {
+        setError("Username is required.");
+        return;
+      }
+      if (!password || password.length < 4) {
+        setError("Password must be at least 4 characters long.");
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await api.post("/auth/register", {
+          fullName: fullName.trim(),
+          phone: phone.trim() || null,
+          username: username.trim(),
+          password,
+        });
+        const registerData = response.data?.data;
+        if (registerData?.token) {
+          localStorage.setItem("token", registerData.token);
+          if (registerData.user) {
+            localStorage.setItem("user", JSON.stringify(registerData.user));
+          }
+          connectSocket();
+          navigate("/dashboard", { replace: true });
+        } else {
+          setSuccessMessage("Family member registered successfully. You can now sign in.");
+          switchMode("login");
+        }
+      } catch (requestError) {
+        console.error("Registration error:", requestError);
+        setError(
+          requestError.response?.data?.message ||
+            "Registration failed. Please choose another username."
         );
-      });
-
-      socket.once("connect_error", (socketError) => {
-        console.error(
-          "Socket.IO connection error:",
-          socketError.message
-        );
-      });
-
-      // Go to dashboard
-      navigate("/dashboard", {
-        replace: true,
-      });
-    } catch (requestError) {
-      console.error("Login error:", requestError);
-
-      setError(
-        requestError.response?.data?.message ||
-          requestError.message ||
-          "Login failed. Please check your username and password."
-      );
-    } finally {
-      setLoading(false);
+      } finally {
+        setLoading(false);
+      }
     }
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#f5f6fa",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "400px",
-          padding: "30px",
-          backgroundColor: "#ffffff",
-          borderRadius: "10px",
-          boxShadow:
-            "0 4px 15px rgba(0, 0, 0, 0.08)",
-        }}
-      >
-        <h1>Chule Digita</h1>
+    <main className="login-page">
+      <section className="login-intro">
+        <div className="login-brand">
+          <span className="brand-mark">CD</span>
+          <strong>Chule Digita</strong>
+        </div>
+        <div className="login-message">
+          <p className="eyebrow">Family business hub</p>
+          <h1>Keep the whole business in the room.</h1>
+          <p>
+            Customers, orders, money, notes, and the people behind every action
+            in one shared workspace.
+          </p>
+        </div>
+        <span className="login-footnote">
+          Simple records. Shared responsibility.
+        </span>
+      </section>
 
-        <h2>Login</h2>
-
-        <p>
-          Family Business Management System
-        </p>
-
-        {error && (
-          <div
-            style={{
-              marginBottom: "15px",
-              padding: "10px",
-              color: "#b91c1c",
-              backgroundColor: "#fee2e2",
-              borderRadius: "6px",
-            }}
-          >
-            {error}
+      <section className="login-panel">
+        <div className="login-panel-inner">
+          <div className="segmented-control" role="tablist" style={{ marginBottom: "1.5rem" }}>
+            <button
+              type="button"
+              className={mode === "login" ? "segment-active" : "button-secondary"}
+              onClick={() => switchMode("login")}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              className={mode === "register" ? "segment-active" : "button-secondary"}
+              onClick={() => switchMode("register")}
+            >
+              Register Family Member
+            </button>
           </div>
-        )}
 
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            display: "grid",
-            gap: "15px",
-          }}
-        >
-          <label>
-            Username
+          <p className="eyebrow">
+            {mode === "login" ? "Welcome back" : "New family member"}
+          </p>
+          <h2>
+            {mode === "login"
+              ? "Sign in to your workspace"
+              : "Create a family member account"}
+          </h2>
+          <p className="login-subtitle">
+            {mode === "login"
+              ? "Use your family member account to continue."
+              : "Join the shared business workspace."}
+          </p>
 
-            <input
-              type="text"
-              value={username}
-              onChange={(event) =>
-                setUsername(event.target.value)
-              }
-              placeholder="Enter username"
-              autoComplete="username"
-              required
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "10px",
-                marginTop: "5px",
-              }}
-            />
-          </label>
+          {successMessage && (
+            <div className="alert alert-success" role="status">
+              {successMessage}
+            </div>
+          )}
+          {error && (
+            <div className="alert alert-error" role="alert">
+              {error}
+            </div>
+          )}
 
-          <label>
-            Password
+          <form className="form-stack" onSubmit={handleSubmit}>
+            {mode === "register" && (
+              <>
+                <label htmlFor="fullName">
+                  Full Name
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    placeholder="Enter your full name"
+                    autoComplete="name"
+                    required
+                  />
+                </label>
 
-            <input
-              type="password"
-              value={password}
-              onChange={(event) =>
-                setPassword(event.target.value)
-              }
-              placeholder="Enter password"
-              autoComplete="current-password"
-              required
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "10px",
-                marginTop: "5px",
-              }}
-            />
-          </label>
+                <label htmlFor="phone">
+                  Phone Number <span className="muted">(optional)</span>
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="e.g. 0911..."
+                    autoComplete="tel"
+                  />
+                </label>
+              </>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: "11px",
-              cursor: loading
-                ? "not-allowed"
-                : "pointer",
-            }}
-          >
-            {loading
-              ? "Logging in..."
-              : "Login"}
-          </button>
-        </form>
-      </div>
-    </div>
+            <label htmlFor="username">
+              Username
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Enter your username"
+                autoComplete="username"
+                required
+              />
+            </label>
+
+            <label htmlFor="password">
+              Password
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={
+                  mode === "login"
+                    ? "Enter your password"
+                    : "At least 4 characters"
+                }
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                required
+              />
+            </label>
+
+            <button type="submit" disabled={loading}>
+              {loading
+                ? mode === "login"
+                  ? "Signing in..."
+                  : "Registering..."
+                : mode === "login"
+                ? "Sign in"
+                : "Register account"}
+              <span aria-hidden="true"> -&gt;</span>
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
   );
 }
 
 export default Login;
+

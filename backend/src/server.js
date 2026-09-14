@@ -42,7 +42,7 @@ async function startServer() {
     );
 
     socket.user = {
-      id: decoded.userId,
+      id: decoded.id,
       username: decoded.username,
     };
 

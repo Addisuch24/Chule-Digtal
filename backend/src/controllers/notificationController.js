@@ -141,10 +141,8 @@ async function markNotificationAsRead(req, res) {
         message: "Valid notificationId is required",
       });
     }
-    const updatedNotification =
-  await notificationModel.markNotificationAsRead(notificationId);
-const existingNotification =
-  await notificationModel.getNotificationById(notificationId);
+    const existingNotification =
+      await notificationModel.getNotificationById(notificationId);
 
 if (!existingNotification) {
   return res.status(404).json({
@@ -159,6 +157,7 @@ if (existingNotification.recipient_id !== req.user.id) {
     message: "You are not allowed to modify this notification",
   });
 }
+
     const notification =
       await notificationModel.markNotificationAsRead(
         Number(notificationId)

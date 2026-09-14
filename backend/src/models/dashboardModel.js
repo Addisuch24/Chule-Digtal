@@ -129,10 +129,14 @@ const [recentActivities] = await pool.execute(`
     a.entity_type,
     a.entity_id,
     a.description,
-    a.created_at
+    a.created_at,
+    customer.full_name AS customer_name
   FROM activities a
   JOIN family_members fm
     ON fm.id = a.actor_id
+  LEFT JOIN customers customer
+    ON a.entity_type = 'CUSTOMER'
+    AND a.entity_id = customer.id
   ORDER BY a.created_at DESC, a.id DESC
   LIMIT 10
 `);
