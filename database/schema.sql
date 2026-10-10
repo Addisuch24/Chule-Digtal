@@ -1,4 +1,3 @@
- ```sql
 -- ============================================================
 -- CHULE DIGITA
 -- Family Business Management System
@@ -114,7 +113,32 @@ CREATE TABLE customer_notes (
 
 
 -- ============================================================
--- 4. ORDERS
+-- 4. BUSINESS NOTES (Shared family notes)
+-- ============================================================
+
+CREATE TABLE business_notes (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    note_text TEXT NOT NULL,
+
+    created_by BIGINT UNSIGNED NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_business_notes_created_by
+        FOREIGN KEY (created_by)
+        REFERENCES family_members(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    INDEX idx_business_notes_created_by (created_by)
+);
+
+
+-- ============================================================
+-- 5. ORDERS
 -- ============================================================
 
 CREATE TABLE orders (
@@ -178,7 +202,7 @@ CREATE TABLE orders (
 
 
 -- ============================================================
--- 5. FINANCIAL MOVEMENTS
+-- 6. FINANCIAL MOVEMENTS
 -- ============================================================
 
 CREATE TABLE financial_movements (
@@ -248,7 +272,7 @@ CREATE TABLE financial_movements (
 
 
 -- ============================================================
--- 6. ACTIVITIES / AUDIT LOG
+-- 7. ACTIVITIES / AUDIT LOG
 -- ============================================================
 
 CREATE TABLE activities (
@@ -282,7 +306,7 @@ CREATE TABLE activities (
 
 
 -- ============================================================
--- 7. NOTIFICATIONS
+-- 8. NOTIFICATIONS
 -- ============================================================
 
 CREATE TABLE notifications (
@@ -325,4 +349,3 @@ CREATE TABLE notifications (
 -- ============================================================
 -- END OF CHULE DIGITA DATABASE SCHEMA
 -- ============================================================
-```

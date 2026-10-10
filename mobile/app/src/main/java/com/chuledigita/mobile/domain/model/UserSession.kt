@@ -1,0 +1,14 @@
+package com.chuledigita.mobile.domain.model
+
+/**
+ * Domain model representing an authenticated user session in Chule Digita.
+ * Maps fields returned from the backend authentication API.
+ */
+data class UserSession(
+    val id: Long,
+    val fullName: String,
+    val phone: String,
+    val username: String,
+    val isActive: Boolean,
+    val token: String
+)

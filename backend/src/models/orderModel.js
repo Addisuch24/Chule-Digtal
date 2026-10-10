@@ -268,6 +268,7 @@ async function updateOrderStatus({
   }
 
   const order = orderRows[0];
+  const previousStatus = order.order_status;
 
   // 3. Order must be verified before confirmation
   if (
@@ -341,6 +342,7 @@ async function updateOrderStatus({
   return {
     type: "SUCCESS",
     order: rows[0],
+    previousStatus: previousStatus,
   };
 }
 

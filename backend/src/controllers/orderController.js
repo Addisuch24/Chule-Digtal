@@ -1,20 +1,14 @@
-const activityService = require("../services/activityService");const orderModel = require("../models/orderModel");
+const activityService = require("../services/activityService");
+const orderModel = require("../models/orderModel");
 const customerModel = require("../models/customerModel");
 
 async function createOrder(req, res) {
   try {
     const { customerId } = req.params;
-    const {
-      orderNumber,
-      description,
-     
-    } = req.body;
-    const  takenBy = req.user.id;
+    const { orderNumber, description } = req.body;
+    const takenBy = req.user.id;
 
-    if (
-      !Number.isInteger(Number(customerId)) ||
-      Number(customerId) <= 0
-    ) {
+    if (!Number.isInteger(Number(customerId)) || Number(customerId) <= 0) {
       return res.status(400).json({
         success: false,
         message: "customerId must be a valid customer ID",
@@ -35,35 +29,32 @@ async function createOrder(req, res) {
       });
     }
 
-    if (
-      !Number.isInteger(Number(takenBy)) ||
-      Number(takenBy) <= 0
-    ) {
+    if (!Number.isInteger(Number(takenBy)) || Number(takenBy) <= 0) {
       return res.status(400).json({
         success: false,
         message: "takenBy must be a valid family member ID",
       });
     }
+
     const familyMemberExists = await customerModel.familyMemberExists(
-  Number(takenBy)
-);
+      Number(takenBy)
+    );
 
-if (!familyMemberExists) {
-  return res.status(400).json({
-    success: false,
-    message: "Family member not found or inactive",
-  });
-}
-    const customer = await customerModel.getCustomerById(
-  Number(customerId)
-);
+    if (!familyMemberExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Family member not found or inactive",
+      });
+    }
 
-if (!customer) {
-  return res.status(404).json({
-    success: false,
-    message: "Customer not found",
-  });
-}
+    const customer = await customerModel.getCustomerById(Number(customerId));
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
 
     const order = await orderModel.createOrder({
       customerId: Number(customerId),
@@ -87,7 +78,6 @@ if (!customer) {
     return res.status(201).json({
       success: true,
       message: "Order created successfully",
-      
       data: order,
     });
   } catch (error) {
@@ -99,14 +89,12 @@ if (!customer) {
     });
   }
 }
+
 async function getOrderById(req, res) {
   try {
     const { orderId } = req.params;
 
-    if (
-      !Number.isInteger(Number(orderId)) ||
-      Number(orderId) <= 0
-    ) {
+    if (!Number.isInteger(Number(orderId)) || Number(orderId) <= 0) {
       return res.status(400).json({
         success: false,
         message: "orderId must be a valid order ID",
@@ -136,6 +124,7 @@ async function getOrderById(req, res) {
     });
   }
 }
+
 async function getAllOrders(req, res) {
   try {
     const orders = await orderModel.getAllOrders();
@@ -154,15 +143,14 @@ async function getAllOrders(req, res) {
     });
   }
 }
+
 async function verifyOrder(req, res) {
   try {
     const { orderId } = req.params;
     const { verificationNote } = req.body;
-const verifiedBy = req.user.id;
-    if (
-      !Number.isInteger(Number(orderId)) ||
-      Number(orderId) <= 0
-    ) {
+    const verifiedBy = req.user.id;
+
+    if (!Number.isInteger(Number(orderId)) || Number(orderId) <= 0) {
       return res.status(400).json({
         success: false,
         message: "orderId must be a valid order ID",
@@ -176,20 +164,16 @@ const verifiedBy = req.user.id;
       });
     }
 
-    if (
-      !Number.isInteger(Number(verifiedBy)) ||
-      Number(verifiedBy) <= 0
-    ) {
+    if (!Number.isInteger(Number(verifiedBy)) || Number(verifiedBy) <= 0) {
       return res.status(400).json({
         success: false,
         message: "verifiedBy must be a valid family member ID",
       });
     }
 
-    const familyMemberExists =
-      await customerModel.familyMemberExists(
-        Number(verifiedBy)
-      );
+    const familyMemberExists = await customerModel.familyMemberExists(
+      Number(verifiedBy)
+    );
 
     if (!familyMemberExists) {
       return res.status(400).json({
@@ -237,15 +221,14 @@ const verifiedBy = req.user.id;
     });
   }
 }
+
 async function rejectOrder(req, res) {
   try {
     const { orderId } = req.params;
-    const {verificationNote } = req.body;
-const verifiedBy = req.user.id;
-    if (
-      !Number.isInteger(Number(orderId)) ||
-      Number(orderId) <= 0
-    ) {
+    const { verificationNote } = req.body;
+    const verifiedBy = req.user.id;
+
+    if (!Number.isInteger(Number(orderId)) || Number(orderId) <= 0) {
       return res.status(400).json({
         success: false,
         message: "orderId must be a valid order ID",
@@ -259,20 +242,16 @@ const verifiedBy = req.user.id;
       });
     }
 
-    if (
-      !Number.isInteger(Number(verifiedBy)) ||
-      Number(verifiedBy) <= 0
-    ) {
+    if (!Number.isInteger(Number(verifiedBy)) || Number(verifiedBy) <= 0) {
       return res.status(400).json({
         success: false,
         message: "verifiedBy must be a valid family member ID",
       });
     }
 
-    const familyMemberExists =
-      await customerModel.familyMemberExists(
-        Number(verifiedBy)
-      );
+    const familyMemberExists = await customerModel.familyMemberExists(
+      Number(verifiedBy)
+    );
 
     if (!familyMemberExists) {
       return res.status(400).json({
@@ -281,10 +260,7 @@ const verifiedBy = req.user.id;
       });
     }
 
-    if (
-      !verificationNote ||
-      !verificationNote.trim()
-    ) {
+    if (!verificationNote || !verificationNote.trim()) {
       return res.status(400).json({
         success: false,
         message: "verificationNote is required when rejecting an order",
@@ -330,15 +306,14 @@ const verifiedBy = req.user.id;
     });
   }
 }
-  async function updateOrderStatus(req, res) {
+
+async function updateOrderStatus(req, res) {
   try {
     const { orderId } = req.params;
     const { orderStatus } = req.body;
+    const actorId = req.user.id;
 
-    if (
-      !Number.isInteger(Number(orderId)) ||
-      Number(orderId) <= 0
-    ) {
+    if (!Number.isInteger(Number(orderId)) || Number(orderId) <= 0) {
       return res.status(400).json({
         success: false,
         message: "orderId must be a valid order ID",
@@ -387,11 +362,26 @@ const verifiedBy = req.user.id;
       });
     }
     if (result.type === "ALREADY_COMPLETED") {
-  return res.status(400).json({
-    success: false,
-    message: "Completed orders cannot be changed",
-  });
-}
+      return res.status(400).json({
+        success: false,
+        message: "Completed orders cannot be changed",
+      });
+    }
+
+    // Record activity for the status update
+    await activityService.recordActivity({
+      actorId: Number(actorId),
+      activityType: "ORDER_STATUS_UPDATED",
+      entityType: "ORDER",
+      entityId: result.order.id,
+      description: `Order ${result.order.order_number} status updated from ${result.previousStatus} to ${orderStatus}`,
+      metadata: {
+        orderId: result.order.id,
+        orderNumber: result.order.order_number,
+        previousStatus: result.previousStatus,
+        newStatus: orderStatus,
+      },
+    });
 
     return res.status(200).json({
       success: true,
@@ -407,6 +397,7 @@ const verifiedBy = req.user.id;
     });
   }
 }
+
 module.exports = {
   createOrder,
   getOrderById,

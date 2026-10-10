@@ -5,6 +5,7 @@ const compression = require("compression");
 const notificationRoutes = require("./routes/notificationRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const customerNoteRoutes = require("./routes/customerNoteRoutes");
+const businessNoteRoutes = require("./routes/businessNoteRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const financialMovementRoutes = require(
   "./routes/financialMovementRoutes"
@@ -29,6 +30,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/activities", activityRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/customers", customerNoteRoutes);
+app.use("/api/notes", businessNoteRoutes);
 app.use("/api/orders", orderRoutes);
 app.use(
   "/api/financial-movements",
