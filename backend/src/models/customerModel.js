@@ -112,7 +112,7 @@ async function createCustomer({ fullName, phone, createdBy }) {
           SUM(
             CASE
               WHEN f.movement_type = 'DEBIT'
-                   AND f.verification_status = 'VERIFIED'
+                   AND f.verification_status <> 'REJECTED'
               THEN f.amount
               ELSE 0
             END
@@ -124,7 +124,7 @@ async function createCustomer({ fullName, phone, createdBy }) {
           SUM(
             CASE
               WHEN f.movement_type = 'CREDIT'
-                   AND f.verification_status = 'VERIFIED'
+                   AND f.verification_status <> 'REJECTED'
               THEN f.amount
               ELSE 0
             END
@@ -161,7 +161,7 @@ async function createCustomer({ fullName, phone, createdBy }) {
       ...customer,
       totalDebit,
       totalCredit,
-      balance: totalDebit - totalCredit,
+      balance: totalCredit - totalDebit,
     };
   });
 }

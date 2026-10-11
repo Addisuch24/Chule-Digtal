@@ -105,53 +105,25 @@ function Login() {
       <section className="login-intro">
         <div className="login-brand">
           <span className="brand-mark">CD</span>
-          <strong>Chule Digita</strong>
+          <strong>Chule Digital</strong>
         </div>
-        <div className="login-message">
-          <p className="eyebrow">Family business hub</p>
-          <h1>Keep the whole business in the room.</h1>
-          <p>
-            Customers, orders, money, notes, and the people behind every action
-            in one shared workspace.
-          </p>
+        <div className="login-copy">
+          <p lang="en">Manage your business together.</p>
+          <p lang="am">ንግድዎን በአንድነት ያስተዳድሩ።</p>
         </div>
-        <span className="login-footnote">
-          Simple records. Shared responsibility.
-        </span>
       </section>
 
       <section className="login-panel">
-        <div className="login-panel-inner">
-          <div className="segmented-control" role="tablist" style={{ marginBottom: "1.5rem" }}>
+        <div className="login-card">
+          <div className="login-card-header">
             <button
               type="button"
-              className={mode === "login" ? "segment-active" : "button-secondary"}
-              onClick={() => switchMode("login")}
+              className="login-register-button"
+              onClick={() => switchMode(mode === "login" ? "register" : "login")}
             >
-              Sign In
-            </button>
-            <button
-              type="button"
-              className={mode === "register" ? "segment-active" : "button-secondary"}
-              onClick={() => switchMode("register")}
-            >
-              Register Family Member
+              {mode === "login" ? "Register" : "Sign In"}
             </button>
           </div>
-
-          <p className="eyebrow">
-            {mode === "login" ? "Welcome back" : "New family member"}
-          </p>
-          <h2>
-            {mode === "login"
-              ? "Sign in to your workspace"
-              : "Create a family member account"}
-          </h2>
-          <p className="login-subtitle">
-            {mode === "login"
-              ? "Use your family member account to continue."
-              : "Join the shared business workspace."}
-          </p>
 
           {successMessage && (
             <div className="alert alert-success" role="status">
@@ -244,4 +216,3 @@ function Login() {
 }
 
 export default Login;
-

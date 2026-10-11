@@ -207,6 +207,132 @@ async function getAllFinancialMovements(req, res) {
   }
 }
 
+async function updateFinancialMovement(req, res) {
+  try {
+    const { movementId } = req.params;
+    const {
+      customerId,
+      amount,
+      movementType,
+      description,
+    } = req.body;
+
+    if (
+      !Number.isInteger(Number(movementId)) ||
+      Number(movementId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "movementId must be a valid movement ID",
+      });
+    }
+
+    if (
+      customerId === undefined ||
+      customerId === null ||
+      !Number.isInteger(Number(customerId)) ||
+      Number(customerId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId must be a valid customer ID",
+      });
+    }
+
+    if (
+      amount === undefined ||
+      amount === null ||
+      Number.isNaN(Number(amount)) ||
+      Number(amount) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "amount must be greater than 0",
+      });
+    }
+
+    const allowedMovementTypes = ["DEBIT", "CREDIT"];
+    if (
+      movementType === undefined ||
+      movementType === null ||
+      !allowedMovementTypes.includes(movementType)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "movementType must be DEBIT or CREDIT",
+      });
+    }
+
+    const movement =
+      await financialMovementModel.updateFinancialMovement({
+        movementId: Number(movementId),
+        customerId: Number(customerId),
+        amount: Number(amount),
+        movementType,
+        description,
+      });
+
+    if (!movement) {
+      return res.status(404).json({
+        success: false,
+        message: "Financial movement not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Financial movement updated successfully",
+      data: movement,
+    });
+  } catch (error) {
+    console.error("Update financial movement error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update financial movement",
+    });
+  }
+}
+
+async function deleteFinancialMovement(req, res) {
+  try {
+    const { movementId } = req.params;
+
+    if (
+      !Number.isInteger(Number(movementId)) ||
+      Number(movementId) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "movementId must be a valid movement ID",
+      });
+    }
+
+    const deleted = await financialMovementModel.deleteFinancialMovement(
+      Number(movementId)
+    );
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Financial movement not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Financial movement deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete financial movement error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete financial movement",
+    });
+  }
+}
+
 async function verifyFinancialMovement(req, res) {
   try {
     const { movementId } = req.params;
@@ -612,6 +738,8 @@ module.exports = {
   createFinancialMovement,
   getFinancialMovementById,
   getAllFinancialMovements,
+  updateFinancialMovement,
+  deleteFinancialMovement,
   verifyFinancialMovement,
   rejectFinancialMovement,
   getCustomerBalance,

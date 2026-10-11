@@ -63,7 +63,100 @@ async function getAllBusinessNotes(req, res) {
   }
 }
 
+async function updateBusinessNote(req, res) {
+  try {
+    const { noteId } = req.params;
+    const { note_text: noteText } = req.body;
+    const updatedBy = Number(req.user.id);
+
+    if (!/^\d+$/.test(noteId) || Number(noteId) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "noteId must be a valid note ID",
+      });
+    }
+
+    if (!noteText || !noteText.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Note text is required",
+      });
+    }
+
+    if (noteText.length > 10000) {
+      return res.status(400).json({
+        success: false,
+        message: "Note text is too long (maximum 10,000 characters)",
+      });
+    }
+
+    const note = await businessNoteService.updateBusinessNote({
+      noteId: Number(noteId),
+      noteText: noteText.trim(),
+      updatedBy,
+    });
+
+    if (!note) {
+      return res.status(404).json({
+        success: false,
+        message: "Business note not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Business note updated successfully",
+      data: note,
+    });
+  } catch (error) {
+    console.error("Update business note error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update business note",
+    });
+  }
+}
+
+async function deleteBusinessNote(req, res) {
+  try {
+    const { noteId } = req.params;
+    const deletedBy = Number(req.user.id);
+
+    if (!/^\d+$/.test(noteId) || Number(noteId) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "noteId must be a valid note ID",
+      });
+    }
+
+    const deleted = await businessNoteService.deleteBusinessNote({
+      noteId: Number(noteId),
+      deletedBy,
+    });
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Business note not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Business note deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete business note error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete business note",
+    });
+  }
+}
+
 module.exports = {
   createBusinessNote,
   getAllBusinessNotes,
+  updateBusinessNote,
+  deleteBusinessNote,
 };

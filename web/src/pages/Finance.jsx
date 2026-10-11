@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import FeedbackState from "../components/FeedbackState";
 import PageHeader from "../components/PageHeader";
-import StatusBadge from "../components/StatusBadge";
 
 const formatAmount = (value) =>
   `${Number(value || 0).toLocaleString("en-US")} ETB`;
@@ -24,22 +22,26 @@ function getArrayData(response, key) {
 }
 
 function Finance() {
-  const [searchParams] = useSearchParams();
   const [movements, setMovements] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [customerId, setCustomerId] = useState(
-    searchParams.get("customerId") || ""
-  );
-  const [movementType, setMovementType] = useState("DEBIT");
-  const [amount, setAmount] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [signedAmount, setSignedAmount] = useState("");
   const [description, setDescription] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [reviewId, setReviewId] = useState(null);
-  const [verificationNote, setVerificationNote] = useState("");
+  const [editingMovement, setEditingMovement] = useState(null);
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null);
+  const [openMenuMovementId, setOpenMenuMovementId] = useState(null);
+  const [autosaveStatus, setAutosaveStatus] = useState("");
+  const [busyMovementId, setBusyMovementId] = useState(null);
+  const movementList = useRef(null);
+  const editSaveTimer = useRef(null);
+  const latestEdit = useRef(null);
+  const saveQueue = useRef(Promise.resolve());
 
   const loadMovements = useCallback(async (showSpinner = false) => {
     try {
@@ -72,52 +74,210 @@ function Finance() {
     loadCustomers();
   }, [loadMovements, loadCustomers]);
 
+  useEffect(() => {
+    if (openMenuMovementId === null) return undefined;
+
+    function handleMenuDismiss(event) {
+      if (event.type === "keydown" && event.key === "Escape") {
+        setOpenMenuMovementId(null);
+      } else if (
+        event.type === "pointerdown" &&
+        !movementList.current?.contains(event.target)
+      ) {
+        setOpenMenuMovementId(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleMenuDismiss);
+    document.addEventListener("pointerdown", handleMenuDismiss);
+
+    return () => {
+      document.removeEventListener("keydown", handleMenuDismiss);
+      document.removeEventListener("pointerdown", handleMenuDismiss);
+    };
+  }, [openMenuMovementId]);
+
+  const saveMovementEdit = useCallback(
+    (movement) => {
+      if (!movement || !movement.id) return;
+
+      const nextCustomerId = Number(movement.customer_id);
+      const signedAmountValue = Number(movement.amount);
+      if (
+        !Number.isFinite(signedAmountValue) ||
+        signedAmountValue === 0 ||
+        !nextCustomerId
+      ) {
+        setAutosaveStatus("Enter a customer and a non-zero amount.");
+        return;
+      }
+      const nextAmount = Math.abs(signedAmountValue);
+      const nextType = signedAmountValue < 0 ? "DEBIT" : "CREDIT";
+      const nextDescription = String(movement.description || "").trim();
+      const customerName =
+        customers.find((customer) => Number(customer.id) === nextCustomerId)
+          ?.full_name ||
+        customers.find((customer) => Number(customer.id) === nextCustomerId)
+          ?.name ||
+        `Customer #${nextCustomerId}`;
+
+      setAutosaveStatus("Saving...");
+
+      const request = saveQueue.current.then(() =>
+        api.patch(`/financial-movements/${movement.id}`, {
+          customerId: nextCustomerId,
+          amount: nextAmount,
+          movementType: nextType,
+          description: nextDescription,
+        })
+      );
+
+      const handledRequest = request.then(
+        () => {
+          setMovements((currentMovements) =>
+            currentMovements.map((currentMovement) =>
+              currentMovement.id === movement.id
+                ? {
+                    ...currentMovement,
+                    customer_id: nextCustomerId,
+                    customer_name: customerName,
+                        customer_phone:
+                          customers.find(
+                            (customer) => Number(customer.id) === nextCustomerId
+                          )?.phone || "",
+                    amount: nextAmount,
+                    movement_type: nextType,
+                    description: nextDescription,
+                    verification_status: "PENDING",
+                    verified_by: null,
+                    verified_at: null,
+                    verification_note: null,
+                  }
+                : currentMovement
+            )
+          );
+          setAutosaveStatus("Saved");
+        },
+        (requestError) => {
+          console.error("Autosave movement error:", requestError);
+          setAutosaveStatus(
+            requestError.response?.data?.message ||
+              "Could not save changes. Keep this page open and try again."
+          );
+        }
+      );
+
+      saveQueue.current = handledRequest.then(
+        () => undefined,
+        () => undefined
+      );
+    },
+    [customers]
+  );
+
+  useEffect(
+    () => () => {
+      if (editSaveTimer.current) {
+        clearTimeout(editSaveTimer.current);
+        saveMovementEdit(latestEdit.current);
+      }
+    },
+    [saveMovementEdit]
+  );
+
+  function updateEditingMovement(field, value) {
+    const nextEdit = { ...latestEdit.current, [field]: value };
+    latestEdit.current = nextEdit;
+    setEditingMovement(nextEdit);
+    setAutosaveStatus("Unsaved changes");
+
+    if (editSaveTimer.current) clearTimeout(editSaveTimer.current);
+    editSaveTimer.current = setTimeout(() => {
+      editSaveTimer.current = null;
+      saveMovementEdit(nextEdit);
+    }, 400);
+  }
+
+  function flushMovementEdit() {
+    if (editSaveTimer.current) {
+      clearTimeout(editSaveTimer.current);
+      editSaveTimer.current = null;
+      saveMovementEdit(latestEdit.current);
+    }
+  }
+
   async function handleCreateMovement(event) {
     event.preventDefault();
     setMessage("");
     setError("");
 
-    if (!customerId) {
-      setError("Please choose a customer.");
+    if (!customerName.trim()) {
+      setError("Please enter the customer's name.");
       return;
     }
-    const numAmount = Number(amount);
-    if (!amount || Number.isNaN(numAmount) || numAmount <= 0) {
-      setError("Amount must be a positive number greater than zero.");
-      return;
-    }
-    if (!description.trim()) {
-      setError("Please add a description.");
+    const enteredAmount = Number(signedAmount);
+    if (
+      signedAmount === "" ||
+      !Number.isFinite(enteredAmount) ||
+      enteredAmount === 0
+    ) {
+      setError("Enter an amount greater than or less than zero.");
       return;
     }
 
     try {
       setSubmitting(true);
+      const normalizedName = customerName.trim().toLocaleLowerCase();
+      const normalizedPhone = phone.replace(/\D/g, "");
+      let customer = normalizedPhone
+        ? customers.find(
+            (item) =>
+              String(item.phone || "").replace(/\D/g, "") === normalizedPhone
+          )
+        : null;
+
+      if (!customer) {
+        customer = customers.find(
+          (item) =>
+            String(item.full_name || "").trim().toLocaleLowerCase() ===
+              normalizedName &&
+            (!normalizedPhone ||
+              String(item.phone || "").replace(/\D/g, "") === normalizedPhone)
+        );
+      }
+
+      if (!customer) {
+        const customerResponse = await api.post("/customers", {
+          full_name: customerName.trim(),
+          phone: phone.trim() || null,
+        });
+        customer = customerResponse.data?.data;
+        if (!customer?.id) {
+          throw new Error("Customer was created without a valid ID.");
+        }
+      }
+
+      const nextMovementType = enteredAmount < 0 ? "DEBIT" : "CREDIT";
       const payload = {
-        customerId: Number(customerId),
-        movementType,
-        amount: numAmount,
-        description: description.trim(),
+        customerId: Number(customer.id),
+        movementType: nextMovementType,
+        amount: Math.abs(enteredAmount),
+        description: description.trim() || null,
       };
 
-      await api.post(
-        movementType === "CREDIT"
-          ? "/financial-movements/payments"
-          : "/financial-movements",
-        payload
-      );
+      await api.post("/financial-movements", payload);
 
-      setMessage(
-        `${movementType === "CREDIT" ? "Payment" : "Debit"} recorded successfully.`
-      );
-      setAmount("");
+      setMessage("Saved successfully.");
+      setCustomerName("");
+      setPhone("");
+      setSignedAmount("");
       setDescription("");
-      setMovementType("DEBIT");
-      await loadMovements();
+      await Promise.all([loadMovements(), loadCustomers()]);
     } catch (requestError) {
       console.error("Create financial movement error:", requestError);
       setError(
         requestError.response?.data?.message ||
+          requestError.message ||
           "We could not record that movement."
       );
     } finally {
@@ -125,32 +285,55 @@ function Finance() {
     }
   }
 
-  async function handleReview(action, movementId) {
-    if (!verificationNote.trim()) {
-      setError("Please add a verification note before continuing.");
+  async function handleDeleteMovement(movement) {
+    const customerLabel =
+      movement.customer_name ||
+      movement.full_name ||
+      `Customer #${movement.customer_id}`;
+    if (
+      !window.confirm(
+        `Delete the ${movement.movement_type || "movement"} for ${customerLabel}? This cannot be undone.`
+      )
+    ) {
       return;
     }
+
     try {
-      setSubmitting(true);
-      setError("");
-      await api.patch(`/financial-movements/${movementId}/${action}`, {
-        verificationNote: verificationNote.trim(),
-      });
-      setMessage(
-        `Movement ${action === "verify" ? "verified" : "rejected"} successfully.`
-      );
-      setReviewId(null);
-      setVerificationNote("");
+      setBusyMovementId(movement.id);
+      await api.delete(`/financial-movements/${movement.id}`);
+      if (latestEdit.current?.id === movement.id) {
+        latestEdit.current = null;
+        setEditingMovement(null);
+      }
+      setOpenMenuMovementId(null);
+      setMessage("Financial movement deleted successfully.");
       await loadMovements();
     } catch (requestError) {
-      console.error("Review financial movement error:", requestError);
+      console.error("Delete movement error:", requestError);
       setError(
         requestError.response?.data?.message ||
-          "We could not update that movement."
+          "We could not delete this financial movement."
       );
     } finally {
-      setSubmitting(false);
+      setBusyMovementId(null);
     }
+  }
+
+  function startEditingMovement(movement) {
+    flushMovementEdit();
+    const nextEdit = {
+      id: movement.id,
+      customer_id: movement.customer_id ?? "",
+      amount:
+        (movement.movement_type || movement.movementType) === "DEBIT"
+          ? -Number(movement.amount ?? 0)
+          : Number(movement.amount ?? 0),
+      description: movement.description || "",
+    };
+    latestEdit.current = nextEdit;
+    setEditingMovement(nextEdit);
+    setAutosaveStatus("");
+    setOpenMenuMovementId(null);
   }
 
   const filteredMovements = useMemo(() => {
@@ -159,6 +342,7 @@ function Finance() {
       if (!query) return true;
       return [
         movement.customer_name,
+        movement.customer_phone,
         movement.full_name,
         movement.description,
         movement.movement_type,
@@ -171,106 +355,117 @@ function Finance() {
     });
   }, [movements, search]);
 
+  const customerGroups = useMemo(() => {
+    const balances = new Map();
+    movements.forEach((movement) => {
+      const customerIdValue = Number(movement.customer_id);
+      const balance = balances.get(customerIdValue) || 0;
+      if (movement.verification_status !== "REJECTED") {
+        const amountValue = Number(movement.amount || 0);
+        balances.set(
+          customerIdValue,
+          balance +
+            ((movement.movement_type || movement.movementType) === "CREDIT"
+              ? amountValue
+              : -amountValue)
+        );
+      }
+    });
+
+    const groups = new Map();
+    filteredMovements.forEach((movement) => {
+      const customerIdValue = Number(movement.customer_id);
+      if (!groups.has(customerIdValue)) {
+        groups.set(customerIdValue, {
+          id: customerIdValue,
+          name:
+            movement.customer_name ||
+            movement.full_name ||
+            `Customer #${customerIdValue}`,
+          phone: movement.customer_phone || "",
+          balance: balances.get(customerIdValue) || 0,
+          movements: [],
+        });
+      }
+      groups.get(customerIdValue).movements.push(movement);
+    });
+    return [...groups.values()].sort((first, second) =>
+      first.name.localeCompare(second.name)
+    );
+  }, [filteredMovements, movements]);
+
+  const customersOwed = customerGroups.filter((group) => group.balance < 0);
+  const customersInCredit = customerGroups.filter(
+    (group) => group.balance > 0
+  );
+
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Money in motion"
-        title="Finance"
-        description="Record customer debits and payments, then keep verification visible to everyone."
+        eyebrow="የገንዘብ ሂሳብ"
+        title="ፋይናንስ"
+        description="የደንበኞችን ዕዳና የተቀበሉትን ብር ይመዝግቡ።"
         action={<span className="count-label">{movements.length} movements</span>}
       />
 
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Record movement</p>
-            <h2>
-              {movementType === "CREDIT" ? "Record a payment" : "Record a debit"}
-            </h2>
-          </div>
-          <div
-            className="segmented-control"
-            role="group"
-            aria-label="Movement type"
-          >
-            <button
-              className={
-                movementType === "DEBIT" ? "segment-active" : "button-secondary"
-              }
-              type="button"
-              onClick={() => setMovementType("DEBIT")}
-            >
-              Debit
-            </button>
-            <button
-              className={
-                movementType === "CREDIT"
-                  ? "segment-active"
-                  : "button-secondary"
-              }
-              type="button"
-              onClick={() => setMovementType("CREDIT")}
-            >
-              Payment / credit
-            </button>
+            <h2>Record an entry</h2>
           </div>
         </div>
 
         <form className="form-stack" onSubmit={handleCreateMovement}>
-          <div className="form-grid">
+          <div className="form-grid finance-entry-grid">
             <label>
-              Customer
-              <select
-                value={customerId}
-                onChange={(event) => setCustomerId(event.target.value)}
-                required
-              >
-                <option value="">Select a customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.full_name || customer.name || `Customer #${customer.id}`}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Amount (ETB)
+              Customer name
               <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="0.00"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Enter customer name"
+                autoComplete="name"
                 required
               />
             </label>
 
-            <div className="form-hint">
-              <strong>{movementType === "CREDIT" ? "Payment" : "Debit"}</strong>
-              <span>
-                Saved as pending until another family member verifies it.
-              </span>
-            </div>
+            <label>
+              Phone <span className="muted">(optional)</span>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="Enter phone number"
+                autoComplete="tel"
+              />
+            </label>
+
+            <label>
+              Amount (birr)
+              <input
+                type="number"
+                step="0.01"
+                value={signedAmount}
+                onChange={(event) => setSignedAmount(event.target.value)}
+                placeholder="-100 or 100"
+                required
+              />
+            </label>
+
+            <label>
+              Description <span className="muted">(optional)</span>
+              <input
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Add a short note"
+              />
+            </label>
           </div>
-
-          <label>
-            Description
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="What was this movement for?"
-              rows="3"
-              required
-            />
-          </label>
-
-          <div>
+          <p className="finance-sign-hint">
+            Negative amount is a debit; positive amount is a credit.
+          </p>
+          <div className="action-row">
             <button type="submit" disabled={submitting}>
-              {submitting
-                ? "Saving..."
-                : `Record ${movementType === "CREDIT" ? "payment" : "debit"}`}
+              {submitting ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
@@ -279,11 +474,11 @@ function Finance() {
         {error && <p className="alert alert-error">{error}</p>}
       </section>
 
-      <section className="panel">
+      <section className="panel" ref={movementList}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">Shared ledger</p>
-            <h2>Financial movements</h2>
+            <h2>Customer balances</h2>
           </div>
           <input
             className="search-input"
@@ -302,100 +497,217 @@ function Finance() {
             message={
               search
                 ? "Try a different search term."
-                : "Record a debit or payment above."
+                : "Add an entry above."
             }
           />
         ) : (
-          <div className="movement-list">
-            {filteredMovements.map((movement) => (
-              <article className="movement-card" key={movement.id}>
-                <div className="movement-main">
-                  <div>
-                    <div className="movement-title">
-                      <StatusBadge
-                        value={movement.movement_type || movement.movementType}
-                      />
-                      <strong>
-                        {movement.customer_name ||
-                          movement.full_name ||
-                          `Customer #${movement.customer_id}`}
-                      </strong>
-                    </div>
-                    <p>{movement.description || "No description"}</p>
-                    <small>
-                      {movement.recorded_by_name ||
-                        movement.creator_name ||
-                        "Family member"}{" "}
-                      · {formatDate(movement.created_at)}
-                    </small>
-                  </div>
-                  <div className="movement-amount">
-                    <strong>{formatAmount(movement.amount)}</strong>
-                    <StatusBadge
-                      value={movement.verification_status || "PENDING"}
-                    />
-                  </div>
-                </div>
+          <div className="finance-balance-columns">
+            {[
+              {
+                key: "negative",
+                label: "ዕዳ ያለባቸው ደንበኞች",
+                sign: "−",
+                groups: customersOwed,
+                balanceClass: "balance-negative",
+              },
+              {
+                key: "positive",
+                label: "ቀሪ ብር ያላቸው ደንበኞች",
+                sign: "+",
+                groups: customersInCredit,
+                balanceClass: "balance-positive",
+              },
+            ].map((column) => (
+              <section
+                className={`finance-balance-column finance-${column.key}`}
+                key={column.key}
+              >
+                <h3 className={`finance-balance-heading ${column.balanceClass}`}>
+                  <span aria-hidden="true">{column.sign}</span>
+                  {column.label}
+                </h3>
+                {column.groups.length === 0 ? (
+                  <p className="finance-empty-column">No customers</p>
+                ) : (
+                  <div className="finance-customer-list">
+                    {column.groups.map((group) => (
+                      <section className="finance-customer-group" key={group.id}>
+                        <header className="finance-customer-heading">
+                          <div>
+                            <button
+                              className="finance-customer-name"
+                              type="button"
+                              aria-expanded={expandedCustomerId === group.id}
+                              aria-controls={`finance-customer-${group.id}-notes`}
+                              onClick={() =>
+                                setExpandedCustomerId(
+                                  expandedCustomerId === group.id ? null : group.id
+                                )
+                              }
+                            >
+                              {group.name}
+                            </button>
+                            {group.phone && <small>{group.phone}</small>}
+                          </div>
+                          <strong
+                            className={`finance-customer-balance ${column.balanceClass}`}
+                          >
+                            {group.balance > 0 ? "+" : "−"}
+                            {formatAmount(Math.abs(group.balance))}
+                          </strong>
+                        </header>
+                        {expandedCustomerId === group.id && (
+                          <div
+                            className="finance-customer-notepad"
+                            id={`finance-customer-${group.id}-notes`}
+                          >
+                            <h4 className="order-reader-title">{group.name}</h4>
+                            <div className="finance-notepad-entries">
+                              {group.movements.map((movement) => (
+                                <article className="movement-card" key={movement.id}>
+                {editingMovement?.id === movement.id ? (
+                  <div className="order-edit-form">
+                    <label>
+                      Customer
+                      <select
+                        value={editingMovement.customer_id}
+                        onChange={(event) =>
+                          updateEditingMovement("customer_id", event.target.value)
+                        }
+                      >
+                        {customers.map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.full_name || customer.name || `Customer #${customer.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                {movement.verification_status === "PENDING" &&
-                  (reviewId === movement.id ? (
-                    <div className="review-box" style={{ marginTop: "1rem" }}>
-                      <label htmlFor={`review-${movement.id}`}>
-                        Verification note <span className="muted">(required)</span>
-                        <textarea
-                          id={`review-${movement.id}`}
-                          value={verificationNote}
+                    <div className="form-grid">
+                      <label>
+                        Amount (birr)
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editingMovement.amount}
                           onChange={(event) =>
-                            setVerificationNote(event.target.value)
+                            updateEditingMovement("amount", event.target.value)
                           }
-                          placeholder="Why are you verifying or rejecting this?"
-                          rows="2"
-                          required
                         />
                       </label>
-                      <div className="action-row" style={{ marginTop: "0.5rem" }}>
-                        <button
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => handleReview("verify", movement.id)}
+                    </div>
+
+                    <label>
+                      Description
+                      <textarea
+                        value={editingMovement.description}
+                        onChange={(event) =>
+                          updateEditingMovement("description", event.target.value)
+                        }
+                        onBlur={flushMovementEdit}
+                        rows="3"
+                      />
+                    </label>
+
+                    <div className="order-edit-footer">
+                      <span role="status">{autosaveStatus}</span>
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        onClick={() => {
+                          flushMovementEdit();
+                          latestEdit.current = null;
+                          setEditingMovement(null);
+                        }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="movement-main">
+                      <div>
+                        <div className="movement-title">
+                          <strong>
+                            {movement.customer_name ||
+                              movement.full_name ||
+                              `Customer #${movement.customer_id}`}
+                          </strong>
+                        </div>
+                        <p>{movement.description || "No description"}</p>
+                        <small>
+                          {movement.recorded_by_name ||
+                            movement.creator_name ||
+                            "Family member"}{" "}
+                          · {formatDate(movement.created_at)}
+                        </small>
+                      </div>
+                      <div className="movement-amount">
+                        <strong
+                          className={
+                            (movement.movement_type || movement.movementType) ===
+                            "DEBIT"
+                              ? "balance-negative"
+                              : "balance-positive"
+                          }
                         >
-                          Verify
-                        </button>
-                        <button
-                          className="button-danger"
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => handleReview("reject", movement.id)}
-                        >
-                          Reject
-                        </button>
-                        <button
-                          className="button-secondary"
-                          type="button"
-                          onClick={() => {
-                            setReviewId(null);
-                            setVerificationNote("");
-                          }}
-                        >
-                          Cancel
-                        </button>
+                          {(movement.movement_type || movement.movementType) ===
+                          "DEBIT"
+                            ? "-"
+                            : "+"}
+                          {formatAmount(movement.amount)}
+                        </strong>
+                        <div className="order-note-menu">
+                          <button
+                            className="order-menu-trigger"
+                            type="button"
+                            aria-label={`More actions for ${movement.customer_name || `customer ${movement.customer_id}`}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openMenuMovementId === movement.id}
+                            onClick={() =>
+                              setOpenMenuMovementId(
+                                openMenuMovementId === movement.id ? null : movement.id
+                              )
+                            }
+                          >
+                            &hellip;
+                          </button>
+                          {openMenuMovementId === movement.id && (
+                            <div className="order-menu" role="menu">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => startEditingMovement(movement)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="order-menu-delete"
+                                type="button"
+                                role="menuitem"
+                                onClick={() => handleDeleteMovement(movement)}
+                                disabled={busyMovementId === movement.id}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      style={{ marginTop: "0.75rem" }}
-                      onClick={() => {
-                        setReviewId(movement.id);
-                        setVerificationNote("");
-                        setError("");
-                      }}
-                    >
-                      Review movement
-                    </button>
-                  ))}
-              </article>
+                  </>
+                )}
+                                </article>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+                )}
+              </section>
             ))}
           </div>
         )}
@@ -405,4 +717,3 @@ function Finance() {
 }
 
 export default Finance;
-

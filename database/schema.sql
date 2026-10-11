@@ -144,13 +144,16 @@ CREATE TABLE business_notes (
 CREATE TABLE orders (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
-    customer_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NULL,
 
     order_number VARCHAR(50) NOT NULL UNIQUE,
+
+    title VARCHAR(150) NULL,
 
     description TEXT NULL,
 
     order_status ENUM(
+        'DRAFT',
         'PENDING',
         'CONFIRMED',
         'PROCESSING',
@@ -179,7 +182,7 @@ CREATE TABLE orders (
     CONSTRAINT fk_orders_customer
         FOREIGN KEY (customer_id)
         REFERENCES customers(id)
-        ON DELETE RESTRICT
+        ON DELETE SET NULL
         ON UPDATE CASCADE,
 
     CONSTRAINT fk_orders_taken_by

@@ -18,6 +18,16 @@ router.get(
   financialMovementController.getAllFinancialMovements
 );
 
+// Update or delete a financial movement
+router.patch(
+  "/:movementId",
+  financialMovementController.updateFinancialMovement
+);
+router.delete(
+  "/:movementId",
+  financialMovementController.deleteFinancialMovement
+);
+
 // Verify financial movement
 router.patch(
   "/:movementId/verify",

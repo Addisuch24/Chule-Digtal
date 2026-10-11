@@ -6,16 +6,14 @@ async function getDashboardSummary(userId) {
     FROM customers
   `);
 
-  const [[pendingOrders]] = await pool.execute(`
+  const [[totalOrders]] = await pool.execute(`
     SELECT COUNT(*) AS total
     FROM orders
-    WHERE order_status = 'PENDING'
   `);
 
-  const [[completedOrders]] = await pool.execute(`
+  const [[totalNotes]] = await pool.execute(`
     SELECT COUNT(*) AS total
-    FROM orders
-    WHERE order_status = 'COMPLETED'
+    FROM business_notes
   `);
 
   const [[pendingFinancialMovements]] = await pool.execute(`
@@ -29,7 +27,7 @@ async function getDashboardSummary(userId) {
       SUM(
         CASE
           WHEN movement_type = 'DEBIT'
-            AND verification_status = 'VERIFIED'
+            AND verification_status <> 'REJECTED'
           THEN amount
           ELSE 0
         END
@@ -41,7 +39,7 @@ async function getDashboardSummary(userId) {
       SUM(
         CASE
           WHEN movement_type = 'CREDIT'
-            AND verification_status = 'VERIFIED'
+            AND verification_status <> 'REJECTED'
           THEN amount
           ELSE 0
         END
@@ -78,12 +76,12 @@ const [[customerBalanceSummary]] = await pool.execute(`
       COALESCE(
         SUM(
           CASE
-            WHEN fm.movement_type = 'DEBIT'
-              AND fm.verification_status = 'VERIFIED'
+            WHEN fm.movement_type = 'CREDIT'
+              AND fm.verification_status <> 'REJECTED'
             THEN fm.amount
 
-            WHEN fm.movement_type = 'CREDIT'
-              AND fm.verification_status = 'VERIFIED'
+            WHEN fm.movement_type = 'DEBIT'
+              AND fm.verification_status <> 'REJECTED'
             THEN -fm.amount
 
             ELSE 0
@@ -145,13 +143,27 @@ const [recentOrdersList] = await pool.execute(`
     o.id,
     o.customer_id,
     c.full_name AS customer_name,
-    o.order_status,
+    o.title,
     o.created_at
   FROM orders o
-  JOIN customers c
+  LEFT JOIN customers c
     ON c.id = o.customer_id
   ORDER BY o.created_at DESC, o.id DESC
   LIMIT 10
+`);
+const [recentNotesList] = await pool.execute(`
+  SELECT
+    bn.id,
+    bn.note_text,
+    bn.created_by,
+    fm.full_name AS created_by_name,
+    bn.created_at,
+    bn.updated_at
+  FROM business_notes bn
+  JOIN family_members fm
+    ON fm.id = bn.created_by
+  ORDER BY bn.updated_at DESC, bn.id DESC
+  LIMIT 8
 `);
 const [[myActivityCount]] = await pool.execute(`
   SELECT COUNT(*) AS total
@@ -159,15 +171,6 @@ const [[myActivityCount]] = await pool.execute(`
   WHERE actor_id = ?
 `, [userId]);
   return {
-    pendingVerification: {
-  orders: Number(pendingOrders.total),
-  financialMovements: Number(
-    pendingFinancialMovements.total
-  ),
-  total:
-    Number(pendingOrders.total) +
-    Number(pendingFinancialMovements.total),
-},
     myActivity: {
   total: Number(myActivityCount.total),
 },
@@ -184,9 +187,11 @@ const [[myActivityCount]] = await pool.execute(`
   ),
 },
     orders: {
-      pending: Number(pendingOrders.total),
-      completed: Number(completedOrders.total),
+      total: Number(totalOrders.total),
       recent: Number(recentOrders.total),
+    },
+    notes: {
+      total: Number(totalNotes.total),
     },
     financialMovements: {
       pending: Number(pendingFinancialMovements.total),
@@ -199,6 +204,7 @@ const [[myActivityCount]] = await pool.execute(`
     activities: {
       recent: recentActivities,
       recentOrders: recentOrdersList,
+      recentNotes: recentNotesList,
     },
     financialMovements: {
   pending: Number(pendingFinancialMovements.total),
@@ -206,8 +212,8 @@ const [[myActivityCount]] = await pool.execute(`
   totalDebit: Number(financialSummary.total_debit),
   totalCredit: Number(financialSummary.total_credit),
   balance:
-    Number(financialSummary.total_debit) -
-    Number(financialSummary.total_credit),
+  Number(financialSummary.total_credit) -
+  Number(financialSummary.total_debit),
 },
   };
   

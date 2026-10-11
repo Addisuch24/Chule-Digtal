@@ -24,22 +24,13 @@ async function getDashboardSummary(req, res) {
         total: Number(summary.myActivity?.total || 0),
       },
 
-      pendingVerification: {
-        orders: Number(
-          summary.pendingVerification?.orders || 0
-        ),
-        financialMovements: Number(
-          summary.pendingVerification?.financialMovements || 0
-        ),
-        total: Number(
-          summary.pendingVerification?.total || 0
-        ),
+      orders: {
+        total: Number(summary.orders?.total || 0),
+        recent: Number(summary.orders?.recent || 0),
       },
 
-      orders: {
-        pending: Number(summary.orders?.pending || 0),
-        completed: Number(summary.orders?.completed || 0),
-        recent: Number(summary.orders?.recent || 0),
+      notes: {
+        total: Number(summary.notes?.total || 0),
       },
 
       financialMovements: {
@@ -76,6 +67,12 @@ async function getDashboardSummary(req, res) {
         summary.recentOrders || summary.activities?.recentOrders
       )
         ? summary.recentOrders || summary.activities.recentOrders
+        : [],
+
+      recentNotes: Array.isArray(
+        summary.recentNotes || summary.activities?.recentNotes
+      )
+        ? summary.recentNotes || summary.activities.recentNotes
         : [],
     };
 

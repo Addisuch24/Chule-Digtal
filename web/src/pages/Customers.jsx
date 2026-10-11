@@ -1,37 +1,43 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import FeedbackState from "../components/FeedbackState";
 import PageHeader from "../components/PageHeader";
 
 const formatDate = (value) =>
   value
-    ? new Date(value).toLocaleDateString("en-US", { dateStyle: "medium" })
+    ? new Date(value).toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
     : "Not available";
 
+function noteHeading(noteText) {
+  return noteText.trim().split(/\r?\n/, 1)[0] || "Untitled note";
+}
+
 function Customers() {
-  const [customers, setCustomers] = useState([]);
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState([]);
   const [noteText, setNoteText] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [openMenuNoteId, setOpenMenuNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const noteList = useRef(null);
 
-  const loadCustomers = useCallback(async (showSpinner = false) => {
+  const loadNotes = useCallback(async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
       setError("");
-      const response = await api.get("/customers");
-      setCustomers(
-        Array.isArray(response.data?.data) ? response.data.data : []
-      );
+      const response = await api.get("/notes");
+      setNotes(Array.isArray(response.data?.data) ? response.data.data : []);
     } catch (requestError) {
-      console.error("Load customers error:", requestError);
+      console.error("Load notes error:", requestError);
       setError(
-        requestError.response?.data?.message || "We could not load customers."
+        requestError.response?.data?.message || "We could not load notes."
       );
     } finally {
       setLoading(false);
@@ -39,117 +45,177 @@ function Customers() {
   }, []);
 
   useEffect(() => {
-    loadCustomers(false);
-  }, [loadCustomers]);
+    loadNotes();
+  }, [loadNotes]);
 
-  async function handleCreateCustomer(event) {
+  useEffect(() => {
+    if (openMenuNoteId === null) return undefined;
+
+    function handleMenuDismiss(event) {
+      if (event.type === "keydown" && event.key === "Escape") {
+        setOpenMenuNoteId(null);
+      } else if (
+        event.type === "pointerdown" &&
+        !noteList.current?.contains(event.target)
+      ) {
+        setOpenMenuNoteId(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleMenuDismiss);
+    document.addEventListener("pointerdown", handleMenuDismiss);
+    return () => {
+      document.removeEventListener("keydown", handleMenuDismiss);
+      document.removeEventListener("pointerdown", handleMenuDismiss);
+    };
+  }, [openMenuNoteId]);
+
+  async function handleSaveNote(event) {
     event.preventDefault();
     setMessage("");
     setError("");
-    if (!fullName.trim()) {
-      setError("Please enter the customer's full name.");
+    if (!noteText.trim()) {
+      setError("Please write something in your note.");
       return;
     }
+
     try {
       setSubmitting(true);
-      const customerResponse = await api.post("/customers", {
-        full_name: fullName.trim(),
-        phone: phone.trim() || null,
-      });
-      const createdCustomer = customerResponse.data?.data;
-
-      if (noteText.trim() && createdCustomer?.id) {
-        try {
-          await api.post(`/customers/${createdCustomer.id}/notes`, {
-            note_text: noteText.trim(),
-          });
-          setMessage("Customer and note added successfully.");
-        } catch (noteError) {
-          console.error("Create customer note error:", noteError);
-          setMessage("Customer added, but the note could not be saved.");
-          setError(
-            noteError.response?.data?.message ||
-              "Please add the note from the customer details page."
-          );
-        }
+      if (editingNoteId !== null) {
+        await api.patch(`/notes/${editingNoteId}`, {
+          note_text: noteText.trim(),
+        });
+        setMessage("Note updated successfully.");
+        setSelectedNoteId(editingNoteId);
       } else {
-        setMessage("Customer added successfully.");
+        const response = await api.post("/notes", {
+          note_text: noteText.trim(),
+        });
+        const createdNote = response.data?.data;
+        if (!createdNote?.id) {
+          throw new Error("The server did not return a valid note.");
+        }
+        setMessage("Note saved successfully.");
+        setSelectedNoteId(createdNote.id);
       }
-
-      setFullName("");
-      setPhone("");
       setNoteText("");
-      await loadCustomers();
+      setEditingNoteId(null);
+      await loadNotes();
     } catch (requestError) {
-      console.error("Create customer error:", requestError);
+      console.error("Save note error:", requestError);
       setError(
-        requestError.response?.data?.message || "We could not add that customer."
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "We could not save this note."
       );
     } finally {
       setSubmitting(false);
     }
   }
 
-  const filteredCustomers = useMemo(() => {
+  function startNewNote() {
+    setNoteText("");
+    setEditingNoteId(null);
+    setSelectedNoteId(null);
+    setMessage("");
+    setError("");
+  }
+
+  function startEditingNote(note) {
+    setNoteText(note.note_text || "");
+    setEditingNoteId(note.id);
+    setSelectedNoteId(null);
+    setOpenMenuNoteId(null);
+    setMessage("");
+    setError("");
+  }
+
+  async function handleDeleteNote(note) {
+    if (
+      !window.confirm(
+        `Delete "${noteHeading(note.note_text)}"? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api.delete(`/notes/${note.id}`);
+      setNotes((currentNotes) =>
+        currentNotes.filter((currentNote) => currentNote.id !== note.id)
+      );
+      if (selectedNoteId === note.id) setSelectedNoteId(null);
+      if (editingNoteId === note.id) {
+        setEditingNoteId(null);
+        setNoteText("");
+      }
+      setOpenMenuNoteId(null);
+      setMessage("Note deleted successfully.");
+      setError("");
+    } catch (requestError) {
+      console.error("Delete note error:", requestError);
+      setError(
+        requestError.response?.data?.message || "We could not delete this note."
+      );
+    }
+  }
+
+  const filteredNotes = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return customers.filter((customer) => {
-      if (!query) return true;
-      return `${customer.full_name || ""} ${customer.phone || ""}`
+    if (!query) return notes;
+    return notes.filter((note) =>
+      `${note.note_text || ""} ${note.created_by_name || ""}`
         .toLowerCase()
-        .includes(query);
-    });
-  }, [customers, search]);
+        .includes(query)
+    );
+  }, [notes, search]);
+
+  const selectedNote = notes.find((note) => note.id === selectedNoteId);
 
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Customer records"
-        title="Customers"
-        description="Keep one clear, shared record for every customer relationship."
-        action={<span className="count-label">{customers.length} total</span>}
+        eyebrow="የግል ማስታወሻ"
+        title="ማስታወሻዎች"
+        description="ሀሳቦችንና አስፈላጊ መረጃዎችን እዚህ ይመዝግቡ።"
+        action={<span className="count-label">{notes.length} notes</span>}
       />
+
       <section className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">New record</p>
-            <h2>Add a customer</h2>
+            <p className="eyebrow">{editingNoteId !== null ? "Edit note" : "New note"}</p>
+            <h2>{editingNoteId !== null ? "Update your note" : "Write a note"}</h2>
           </div>
-          <span className="muted">Required fields are marked by the browser</span>
+          {editingNoteId !== null && (
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={startNewNote}
+            >
+              Cancel
+            </button>
+          )}
         </div>
-        <form className="form-stack" onSubmit={handleCreateCustomer}>
-          <div className="form-grid">
-            <label>
-              Full name
-              <input
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="e.g. Hana Tesfaye"
-                autoComplete="name"
-                required
-              />
-            </label>
-            <label>
-              Phone <span className="muted">(optional)</span>
-              <input
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="e.g. 09..."
-                autoComplete="tel"
-              />
-            </label>
-          </div>
+        <form className="form-stack" onSubmit={handleSaveNote}>
           <label>
-            Initial note <span className="muted">(optional)</span>
+            Note
             <textarea
               value={noteText}
               onChange={(event) => setNoteText(event.target.value)}
-              placeholder="Add useful context for the family team..."
-              rows="3"
+              placeholder="Write down an idea or important information..."
+              rows="5"
+              maxLength={10000}
+              required
             />
           </label>
-          <div>
+          <div className="action-row">
             <button type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : "Add customer"}
+              {submitting
+                ? "Saving..."
+                : editingNoteId !== null
+                  ? "Save changes"
+                  : "Save note"}
             </button>
           </div>
         </form>
@@ -157,88 +223,139 @@ function Customers() {
         {error && <p className="alert alert-error">{error}</p>}
       </section>
 
-      <section className="panel">
+      <section className="panel" ref={noteList}>
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Directory</p>
-            <h2>All customers</h2>
+            <p className="eyebrow">Your notes</p>
+            <h2>All notes</h2>
           </div>
           <input
             className="search-input"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search name or phone"
-            aria-label="Search customers"
+            placeholder="Search notes"
+            aria-label="Search notes"
           />
         </div>
 
         {loading ? (
-          <FeedbackState type="loading" title="Loading customers..." />
-        ) : filteredCustomers.length === 0 ? (
+          <FeedbackState type="loading" title="Loading notes..." />
+        ) : error && notes.length === 0 ? (
           <FeedbackState
-            title={search ? "No matching customers" : "No customers yet"}
-            message={
-              search
-                ? "Try a different name or phone number."
-                : "Add your first customer above to begin."
+            type="error"
+            title="Notes unavailable"
+            message={error}
+            action={
+              <button type="button" onClick={() => loadNotes(true)}>
+                Try again
+              </button>
             }
           />
+        ) : filteredNotes.length === 0 ? (
+          <FeedbackState
+            title={search ? "No matching notes" : "No notes yet"}
+            message={search ? "Try another search." : "Write your first note above."}
+          />
         ) : (
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Phone</th>
-                  <th>Balance</th>
-                  <th>Created by</th>
-                  <th>Added</th>
-                  <th>
-                    <span className="sr-only">Open</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCustomers.map((customer) => (
-                  <tr key={customer.id}>
-                    <td>
-                      <Link
-                        className="table-primary"
-                        to={`/customers/${customer.id}`}
-                      >
-                        {customer.full_name || "Unnamed customer"}
-                      </Link>
-                      <small>Customer #{customer.id}</small>
-                    </td>
-                    <td>{customer.phone || "Not provided"}</td>
-                    <td>
-                      {Number(customer.balance || 0).toLocaleString("en-US")}{" "}
-                      ETB
-                    </td>
-                    <td>
-                      {customer.created_by_name ||
-                        customer.creator_name ||
-                        "Family member"}
-                    </td>
-                    <td>{formatDate(customer.created_at)}</td>
-                    <td>
-                      <Link
-                        className="table-link"
-                        to={`/customers/${customer.id}`}
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="business-note-list">
+            {filteredNotes.map((note) => {
+              const [heading, ...remainingLines] = String(note.note_text || "")
+                .split(/\r?\n/);
+              const preview = remainingLines.join(" ").trim() || heading;
+              return (
+                <article className="business-note-card" key={note.id}>
+                  <button
+                    className="business-note-open"
+                    type="button"
+                    onClick={() => {
+                      setSelectedNoteId(note.id);
+                      setEditingNoteId(null);
+                      setMessage("");
+                      setError("");
+                    }}
+                  >
+                    <strong>{noteHeading(note.note_text)}</strong>
+                    <span>{preview}</span>
+                    <small>
+                      {note.created_by_name || "Family member"} ·{" "}
+                      {formatDate(note.updated_at || note.created_at)}
+                    </small>
+                  </button>
+                  <div className="order-note-menu">
+                    <button
+                      className="order-menu-trigger"
+                      type="button"
+                      aria-label={`More actions for ${noteHeading(note.note_text)}`}
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuNoteId === note.id}
+                      onClick={() =>
+                        setOpenMenuNoteId(
+                          openMenuNoteId === note.id ? null : note.id
+                        )
+                      }
+                    >
+                      &hellip;
+                    </button>
+                    {openMenuNoteId === note.id && (
+                      <div className="order-menu" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => startEditingNote(note)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="order-menu-delete"
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleDeleteNote(note)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
+
+      {selectedNote && (
+        <section
+          className="business-note-reader-section"
+          aria-label="Selected note"
+        >
+          <div className="section-heading">
+            <h2>{noteHeading(selectedNote.note_text)}</h2>
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={() => setSelectedNoteId(null)}
+            >
+              Close
+            </button>
+          </div>
+          <article className="order-reader">
+            <h3 className="order-reader-title">
+              {noteHeading(selectedNote.note_text)}
+            </h3>
+            <p className="order-reader-body">{selectedNote.note_text}</p>
+            <footer className="order-reader-meta">
+              <span>
+                Written by <strong>{selectedNote.created_by_name || "Family member"}</strong>
+              </span>
+              <time dateTime={selectedNote.updated_at || selectedNote.created_at}>
+                {formatDate(selectedNote.updated_at || selectedNote.created_at)}
+              </time>
+            </footer>
+          </article>
+        </section>
+      )}
     </div>
   );
 }
 
 export default Customers;
-

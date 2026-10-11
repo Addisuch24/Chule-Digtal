@@ -139,7 +139,7 @@ function CustomerDetails() {
         <div className="profile-balance">
           <span>Current balance</span>
           <strong>{Number(customer.balance || 0).toLocaleString("en-US")} ETB</strong>
-          <small>Verified balance</small>
+          <small>Includes entries awaiting review</small>
         </div>
       </section>
 
@@ -211,4 +211,3 @@ function CustomerDetails() {
 }
 
 export default CustomerDetails;
-

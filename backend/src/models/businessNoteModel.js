@@ -73,8 +73,36 @@ async function getBusinessNoteById(noteId) {
   return rows[0] || null;
 }
 
+async function updateBusinessNote({ noteId, noteText }) {
+  const [result] = await pool.execute(
+    `
+      UPDATE business_notes
+      SET note_text = ?
+      WHERE id = ?
+    `,
+    [noteText, noteId]
+  );
+
+  if (result.affectedRows === 0) {
+    return getBusinessNoteById(noteId);
+  }
+
+  return getBusinessNoteById(noteId);
+}
+
+async function deleteBusinessNote(noteId) {
+  const [result] = await pool.execute(
+    "DELETE FROM business_notes WHERE id = ?",
+    [noteId]
+  );
+
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   createBusinessNote,
   getAllBusinessNotes,
   getBusinessNoteById,
+  updateBusinessNote,
+  deleteBusinessNote,
 };

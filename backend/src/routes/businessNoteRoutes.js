@@ -11,5 +11,7 @@ router.post("/", businessNoteController.createBusinessNote);
 
 // Get all global business notes
 router.get("/", businessNoteController.getAllBusinessNotes);
+router.patch("/:noteId", businessNoteController.updateBusinessNote);
+router.delete("/:noteId", businessNoteController.deleteBusinessNote);
 
 module.exports = router;

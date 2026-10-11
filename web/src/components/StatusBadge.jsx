@@ -1,5 +1,6 @@
 const statusLabels = {
   COMPLETED: "Completed",
+  DRAFT: "Draft",
   PENDING: "Pending",
   CONFIRMED: "Confirmed",
   PROCESSING: "Processing",

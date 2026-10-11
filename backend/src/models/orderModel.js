@@ -3,6 +3,7 @@ const pool = require("../config/db");
 async function createOrder({
   customerId,
   orderNumber,
+  title,
   description,
   takenBy,
 }) {
@@ -11,14 +12,16 @@ async function createOrder({
       INSERT INTO orders (
         customer_id,
         order_number,
+        title,
         description,
         taken_by
       )
-      VALUES (?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?)
     `,
     [
       customerId,
       orderNumber,
+      title || null,
       description || null,
       takenBy,
     ]
@@ -31,18 +34,14 @@ async function createOrder({
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
-        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
-        o.verification_status,
-        o.verified_by,
-        o.verified_at,
-        o.verification_note,
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members fm
         ON fm.id = o.taken_by
@@ -63,18 +62,14 @@ async function getOrderById(orderId) {
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
-        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
-        o.verification_status,
-        o.verified_by,
-        o.verified_at,
-        o.verification_note,
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members fm
         ON fm.id = o.taken_by
@@ -99,18 +94,14 @@ async function getAllOrders() {
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
-        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
-        o.verification_status,
-        o.verified_by,
-        o.verified_at,
-        o.verification_note,
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members fm
         ON fm.id = o.taken_by
@@ -137,6 +128,7 @@ async function verifyOrder({
         verification_note = ?
       WHERE id = ?
         AND verification_status = 'PENDING'
+        AND order_status <> 'DRAFT'
     `,
     [
       verifiedBy,
@@ -156,6 +148,7 @@ async function verifyOrder({
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
         o.order_status,
         o.taken_by,
@@ -168,7 +161,7 @@ async function verifyOrder({
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members taker
         ON taker.id = o.taken_by
@@ -198,6 +191,7 @@ async function rejectOrder({
         verification_note = ?
       WHERE id = ?
         AND verification_status = 'PENDING'
+        AND order_status <> 'DRAFT'
     `,
     [
       verifiedBy,
@@ -217,6 +211,7 @@ async function rejectOrder({
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
         o.order_status,
         o.taken_by,
@@ -229,7 +224,7 @@ async function rejectOrder({
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members taker
         ON taker.id = o.taken_by
@@ -244,23 +239,50 @@ async function rejectOrder({
 }
 
 
+async function updateOrder({
+  orderId,
+  title,
+  description,
+}) {
+  await pool.execute(
+    `
+      UPDATE orders
+      SET
+        title = ?,
+        description = ?
+      WHERE id = ?
+    `,
+    [title || null, description || null, orderId]
+  );
+
+  return getOrderById(orderId);
+}
+
+async function deleteOrder(orderId) {
+  const [result] = await pool.execute(
+    "DELETE FROM orders WHERE id = ?",
+    [orderId]
+  );
+  return result.affectedRows > 0;
+}
+
 async function updateOrderStatus({
   orderId,
   orderStatus,
 }) {
-  // 1. Get current order status and verification status
   const [orderRows] = await pool.execute(
     `
       SELECT
         order_status,
-        verification_status
+        verification_status,
+        title,
+        description
       FROM orders
       WHERE id = ?
     `,
     [orderId]
   );
 
-  // 2. Order does not exist
   if (orderRows.length === 0) {
     return {
       type: "NOT_FOUND",
@@ -270,7 +292,22 @@ async function updateOrderStatus({
   const order = orderRows[0];
   const previousStatus = order.order_status;
 
-  // 3. Order must be verified before confirmation
+  if (
+    orderStatus === "PENDING" &&
+    previousStatus === "DRAFT" &&
+    (!order.title?.trim() || !order.description?.trim())
+  ) {
+    return {
+      type: "DRAFT_INCOMPLETE",
+    };
+  }
+
+  if (orderStatus === "DRAFT" && previousStatus !== "DRAFT") {
+    return {
+      type: "INVALID_TRANSITION",
+    };
+  }
+
   if (
     orderStatus === "CONFIRMED" &&
     order.verification_status !== "VERIFIED"
@@ -280,14 +317,12 @@ async function updateOrderStatus({
     };
   }
 
-  // 4. Completed orders cannot be changed
   if (order.order_status === "COMPLETED") {
     return {
       type: "ALREADY_COMPLETED",
     };
   }
 
-  // 5. Update the order status
   const [result] = await pool.execute(
     `
       UPDATE orders
@@ -307,7 +342,6 @@ async function updateOrderStatus({
     };
   }
 
-  // 6. Get the updated order
   const [rows] = await pool.execute(
     `
       SELECT
@@ -315,6 +349,7 @@ async function updateOrderStatus({
         o.customer_id,
         c.full_name AS customer_name,
         o.order_number,
+        o.title,
         o.description,
         o.order_status,
         o.taken_by,
@@ -327,7 +362,7 @@ async function updateOrderStatus({
         o.created_at,
         o.updated_at
       FROM orders o
-      JOIN customers c
+      LEFT JOIN customers c
         ON c.id = o.customer_id
       JOIN family_members taker
         ON taker.id = o.taken_by
@@ -338,11 +373,10 @@ async function updateOrderStatus({
     [orderId]
   );
 
-  // 7. Return successful result
   return {
     type: "SUCCESS",
     order: rows[0],
-    previousStatus: previousStatus,
+    previousStatus,
   };
 }
 
@@ -351,7 +385,6 @@ module.exports = {
   createOrder,
   getOrderById,
   getAllOrders,
-  verifyOrder,
-  rejectOrder,
-  updateOrderStatus,
+  updateOrder,
+  deleteOrder,
 };

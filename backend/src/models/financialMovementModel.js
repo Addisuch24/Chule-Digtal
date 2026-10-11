@@ -62,6 +62,7 @@ async function createFinancialMovement({
         f.id,
         f.customer_id,
         c.full_name AS customer_name,
+        c.phone AS customer_phone,
         f.amount,
         f.movement_type,
         f.description,
@@ -99,6 +100,7 @@ async function getFinancialMovementById(movementId) {
         f.id,
         f.customer_id,
         c.full_name AS customer_name,
+        c.phone AS customer_phone,
         f.amount,
         f.movement_type,
         f.description,
@@ -140,6 +142,7 @@ async function getAllFinancialMovements() {
         f.id,
         f.customer_id,
         c.full_name AS customer_name,
+        c.phone AS customer_phone,
         f.amount,
         f.movement_type,
         f.description,
@@ -201,6 +204,7 @@ async function verifyFinancialMovement({
         f.id,
         f.customer_id,
         c.full_name AS customer_name,
+        c.phone AS customer_phone,
         f.amount,
         f.movement_type,
         f.description,
@@ -263,6 +267,7 @@ async function rejectFinancialMovement({
         f.id,
         f.customer_id,
         c.full_name AS customer_name,
+        c.phone AS customer_phone,
         f.amount,
         f.movement_type,
         f.description,
@@ -292,6 +297,52 @@ async function rejectFinancialMovement({
 
   return rows[0];
 }
+async function updateFinancialMovement({
+  movementId,
+  customerId,
+  amount,
+  movementType,
+  description,
+}) {
+  const [result] = await pool.execute(
+    `
+      UPDATE financial_movements
+      SET
+        customer_id = ?,
+        amount = ?,
+        movement_type = ?,
+        description = ?,
+        verification_status = 'PENDING',
+        verified_by = NULL,
+        verified_at = NULL,
+        verification_note = NULL
+      WHERE id = ?
+    `,
+    [
+      customerId,
+      amount,
+      movementType,
+      description !== undefined && description !== null ? description.trim() || null : null,
+      movementId,
+    ]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return getFinancialMovementById(movementId);
+}
+
+async function deleteFinancialMovement(movementId) {
+  const [result] = await pool.execute(
+    "DELETE FROM financial_movements WHERE id = ?",
+    [movementId]
+  );
+
+  return result.affectedRows > 0;
+}
+
 async function getCustomerBalance(customerId) {
   const [rows] = await pool.execute(
     `
@@ -300,7 +351,7 @@ async function getCustomerBalance(customerId) {
           SUM(
             CASE
               WHEN movement_type = 'DEBIT'
-                   AND verification_status = 'VERIFIED'
+                   AND verification_status <> 'REJECTED'
               THEN amount
               ELSE 0
             END
@@ -312,7 +363,7 @@ async function getCustomerBalance(customerId) {
           SUM(
             CASE
               WHEN movement_type = 'CREDIT'
-                   AND verification_status = 'VERIFIED'
+                   AND verification_status <> 'REJECTED'
               THEN amount
               ELSE 0
             END
@@ -332,7 +383,7 @@ async function getCustomerBalance(customerId) {
     customerId,
     totalDebit,
     totalCredit,
-    balance: totalDebit - totalCredit,
+    balance: totalCredit - totalDebit,
   };
 }
 async function getCustomerPayments(customerId) {
@@ -382,9 +433,10 @@ module.exports = {
   createFinancialMovement,
   getFinancialMovementById,
   getAllFinancialMovements,
+  updateFinancialMovement,
+  deleteFinancialMovement,
   verifyFinancialMovement,
   rejectFinancialMovement,
   getCustomerBalance,
   getCustomerPayments,
-  
 };
