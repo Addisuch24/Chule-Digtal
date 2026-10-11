@@ -71,7 +71,7 @@ io.on("connection", (socket) => {
 
     httpServer.listen(PORT, () => {
       console.log(
-        `Chule Digita API is running on http://localhost:${PORT}`
+        `Chule Digital API is running on http://localhost:${PORT}`
       );
       console.log("Socket.IO real-time server is running");
     });

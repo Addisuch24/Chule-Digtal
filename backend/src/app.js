@@ -23,7 +23,7 @@ app.use(express.json());
 app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: "Chule Digita API is running",
+    message: "Chule Digital API is running",
   });
 });
  

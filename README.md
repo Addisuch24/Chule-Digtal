@@ -1,6 +1,6 @@
-# Chule Digita
+# Chule Digital
 
-Chule Digita is a scalable Family Business Management System.
+Chule Digital is a scalable Family Business Management System.
 
 ## Project Structure
 

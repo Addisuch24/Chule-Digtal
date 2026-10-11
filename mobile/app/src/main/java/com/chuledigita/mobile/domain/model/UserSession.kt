@@ -1,7 +1,7 @@
 package com.chuledigita.mobile.domain.model
 
 /**
- * Domain model representing an authenticated user session in Chule Digita.
+ * Domain model representing an authenticated user session in Chule Digital.
  * Maps fields returned from the backend authentication API.
  */
 data class UserSession(

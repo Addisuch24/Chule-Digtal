@@ -1,7 +1,7 @@
 package com.chuledigita.mobile.data.remote
 
 /**
- * Central API configuration for Chule Digita backend connection.
+ * Central API configuration for Chule Digital backend connection.
  * 
  * Default setup connects to local Node.js Express server on Android Emulator (10.0.2.2:5000/api/).
  * To test on a physical Android device on the same local Wi-Fi, replace EMULATOR_BASE_URL

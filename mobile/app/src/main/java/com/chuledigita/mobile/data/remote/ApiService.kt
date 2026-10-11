@@ -5,7 +5,7 @@ import retrofit2.Response
 import retrofit2.http.*
 
 /**
- * Retrofit API Service interface for Chule Digita backend.
+ * Retrofit API Service interface for Chule Digital backend.
  */
 interface ApiService {
 

@@ -1,7 +1,7 @@
 package com.chuledigita.mobile.domain.model
 
 /**
- * Domain model representing a family member in Chule Digita family business.
+ * Domain model representing a family member in Chule Digital family business.
  * Every business action in the app identifies the family member who performed it.
  */
 data class FamilyMember(

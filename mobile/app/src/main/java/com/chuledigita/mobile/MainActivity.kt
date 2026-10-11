@@ -8,7 +8,7 @@ import com.chuledigita.mobile.ui.navigation.AppNavigation
 import com.chuledigita.mobile.ui.theme.ChuleDigitalTheme
 
 /**
- * Main activity serving as entry point for Chule Digita Jetpack Compose UI.
+ * Main activity serving as entry point for Chule Digital Jetpack Compose UI.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
