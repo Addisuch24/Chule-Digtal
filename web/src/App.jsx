@@ -12,6 +12,7 @@ import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
 import Finance from "./pages/Finance";
 import Notifications from "./pages/Notifications";
+import Profile from "./pages/Profile";
 
 import MainLayout from "./layouts/MainLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -57,6 +58,11 @@ function App() {
             <Route
               path="/notifications"
               element={<Notifications />}
+            />
+
+            <Route
+              path="/profile"
+              element={<Profile />}
             />
           </Route>
         </Route>

@@ -1,7 +1,7 @@
 package com.chuledigita.mobile.domain.model
 
 enum class OrderStatus {
-    PENDING, CONFIRMED, PROCESSING, READY, COMPLETED, CANCELLED
+    DRAFT, PENDING, CONFIRMED, PROCESSING, READY, COMPLETED, CANCELLED
 }
 
 enum class VerificationStatus {
@@ -99,7 +99,8 @@ data class Order(
     val completionTime: String? = null,
     val isVerified: Boolean = false,
     val itemsCount: Int = 0,
-    val history: List<Activity> = emptyList()
+    val history: List<Activity> = emptyList(),
+    val title: String? = null
 )
 
 data class FinancialMovement(

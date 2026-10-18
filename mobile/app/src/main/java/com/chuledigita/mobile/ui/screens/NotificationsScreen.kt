@@ -1,6 +1,8 @@
 package com.chuledigita.mobile.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,11 +27,8 @@ import androidx.navigation.NavHostController
 import com.chuledigita.mobile.domain.model.NotificationItem
 import com.chuledigita.mobile.domain.model.NotificationType
 import com.chuledigita.mobile.ui.components.MainScaffold
+import com.chuledigita.mobile.ui.theme.*
 
-/**
- * Real-time Notifications screen connected to the verified backend API and Socket.IO.
- * Displays business activities performed by other family members.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
@@ -41,96 +42,88 @@ fun NotificationsScreen(
     MainScaffold(
         navController = navController,
         title = "ማሳወቂያዎች",
-        onLogout = onLogout
+        onLogout = onLogout,
+        showBottomBar = true
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(WarmOffWhite)
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
         ) {
-            // Action Header
-            Surface(
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp,
-                color = MaterialTheme.colorScheme.surface
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = { viewModel.refresh() },
-                        enabled = !isRefreshing,
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("አድስ", style = MaterialTheme.typography.labelLarge)
-                    }
-
-                    // Backend limitation: Mark all as read is not implemented.
-                    // We only show mark as read for individual items or could implement locally.
+                // Header
+                item {
+                    NotificationsHeader(
+                        isRefreshing = isRefreshing,
+                        onRefresh = { viewModel.refresh() }
+                    )
                 }
-            }
 
-            when (val state = uiState) {
-                is NotificationsUiState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(strokeWidth = 3.dp)
+                when (val state = uiState) {
+                    is NotificationsUiState.Loading -> {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 60.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = BrandGreen, strokeWidth = 3.dp)
+                            }
+                        }
                     }
-                }
-                is NotificationsUiState.Empty -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                            Surface(
-                                modifier = Modifier.size(80.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Outlined.NotificationsNone, 
-                                        contentDescription = null, 
-                                        modifier = Modifier.size(40.dp),
-                                        tint = MaterialTheme.colorScheme.outline
+                    is NotificationsUiState.Empty -> {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 60.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Surface(
+                                        modifier = Modifier.size(64.dp),
+                                        shape = CircleShape,
+                                        color = BrandGreen.copy(alpha = 0.1f)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Outlined.NotificationsNone,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(32.dp),
+                                                tint = BrandGreen
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(text = "ምንም ማሳወቂያ የለም", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandGreen)
+                                    Text(
+                                        text = "አስፈላጊ የንግድ እንቅስቃሴዎች ሲኖሩ እዚህ ይገለጻሉ።",
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = BrandGreen.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(top = 4.dp)
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text(text = "ምንም ማሳወቂያ የለም", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = "አስፈላጊ የንግድ እንቅስቃሴዎች ሲኖሩ እዚህ ይገለጻሉ።",
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
                         }
                     }
-                }
-                is NotificationsUiState.Error -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                            Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(text = state.message, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
-                            Button(onClick = { viewModel.refresh() }, modifier = Modifier.padding(top = 16.dp)) {
-                                Text("እንደገና ሞክር")
+                    is NotificationsUiState.Error -> {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = ErrorColor, modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(text = state.message, color = ErrorColor, textAlign = TextAlign.Center)
+                                    Button(
+                                        onClick = { viewModel.refresh() },
+                                        modifier = Modifier.padding(top = 16.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = BrandGreen)
+                                    ) {
+                                        Text("እንደገና ሞክር")
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                is NotificationsUiState.Success -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(1.dp),
-                    ) {
+                    is NotificationsUiState.Success -> {
                         items(state.notifications, key = { it.id }) { item ->
-                            NotificationRow(
+                            ProfessionalNotificationCard(
                                 item = item,
                                 onClick = {
                                     if (!item.isRead) {
@@ -138,81 +131,123 @@ fun NotificationsScreen(
                                     }
                                 }
                             )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(horizontal = 20.dp))
                         }
                     }
                 }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
     }
 }
 
 @Composable
-private fun NotificationRow(
+private fun NotificationsHeader(
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "ALERTS & ACTIVITY",
+                style = MaterialTheme.typography.labelSmall,
+                color = BrandGold,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "ማሳወቂያዎች",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = BrandGreen
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "የንግድ እንቅስቃሴዎች እና ማሳወቂያዎች ማዕከል",
+                style = MaterialTheme.typography.bodyMedium,
+                color = BrandGreen.copy(alpha = 0.6f)
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+            onClick = onRefresh,
+            enabled = !isRefreshing,
+            modifier = Modifier
+                .background(CreamSurface, CircleShape)
+                .border(1.dp, BrandGreen.copy(alpha = 0.1f), CircleShape)
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = BrandGreen, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun ProfessionalNotificationCard(
     item: NotificationItem,
     onClick: () -> Unit
 ) {
     val icon = when (item.type) {
-        NotificationType.CUSTOMER_CREATED -> Icons.Outlined.Person
-        NotificationType.CUSTOMER_NOTE_CREATED -> Icons.Outlined.NoteAdd
-        NotificationType.BUSINESS_NOTE_CREATED -> Icons.Outlined.Notes
-        NotificationType.ORDER_CREATED -> Icons.Outlined.ShoppingCart
-        NotificationType.ORDER_VERIFIED -> Icons.Outlined.CheckCircle
-        NotificationType.ORDER_REJECTED -> Icons.Outlined.ErrorOutline
-        NotificationType.ORDER_STATUS_UPDATED -> Icons.Outlined.PublishedWithChanges
-        NotificationType.FINANCIAL_MOVEMENT_CREATED -> Icons.Outlined.ReceiptLong
-        NotificationType.FINANCIAL_MOVEMENT_VERIFIED -> Icons.Outlined.TaskAlt
-        NotificationType.FINANCIAL_MOVEMENT_REJECTED -> Icons.Outlined.Cancel
-        NotificationType.PAYMENT_RECORDED -> Icons.Outlined.Payments
-        else -> Icons.Outlined.Info
+        NotificationType.CUSTOMER_CREATED -> Icons.Outlined.PersonAdd
+        NotificationType.FINANCIAL_MOVEMENT_CREATED,
+        NotificationType.FINANCIAL_MOVEMENT_VERIFIED,
+        NotificationType.PAYMENT_RECORDED -> Icons.Outlined.ReceiptLong
+        else -> Icons.Outlined.Notifications
     }
 
     val iconColor = when (item.type) {
-        NotificationType.ORDER_REJECTED, 
-        NotificationType.FINANCIAL_MOVEMENT_REJECTED -> MaterialTheme.colorScheme.error
-        
-        NotificationType.ORDER_VERIFIED, 
-        NotificationType.FINANCIAL_MOVEMENT_VERIFIED,
-        NotificationType.PAYMENT_RECORDED -> SuccessColor
-        
-        else -> MaterialTheme.colorScheme.primary
+        NotificationType.CUSTOMER_CREATED -> SuccessColor
+        else -> BrandBlue
     }
 
     Surface(
         onClick = onClick,
-        color = if (item.isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (item.isRead) CreamSurface else Color.White,
+        border = BorderStroke(
+            width = if (item.isRead) 1.dp else 1.5.dp,
+            color = if (item.isRead) BrandGreen.copy(alpha = 0.08f) else BrandGreen.copy(alpha = 0.25f)
+        ),
+        shadowElevation = if (item.isRead) 1.dp else 3.dp
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.Top
         ) {
             Surface(
                 shape = CircleShape,
                 color = iconColor.copy(alpha = 0.1f),
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+                    Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(22.dp))
                 }
             }
             
             Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = item.title,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = if (item.isRead) FontWeight.SemiBold else FontWeight.ExtraBold,
-                        color = if (item.isRead) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary
+                        fontWeight = if (item.isRead) FontWeight.SemiBold else FontWeight.Bold,
+                        color = BrandGreen
                     )
                     if (!item.isRead) {
                         Surface(
                             modifier = Modifier.size(8.dp),
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary
+                            color = BrandGold
                         ) {}
                     }
                 }
@@ -222,39 +257,42 @@ private fun NotificationRow(
                 Text(
                     text = item.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (item.isRead) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    color = BrandGreen.copy(alpha = 0.75f),
+                    lineHeight = 20.sp
                 )
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "📅 ${item.date}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        text = "  🕒 ${item.time}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = null, tint = BrandGreen.copy(alpha = 0.4f), modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${item.date} • ${item.time}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BrandGreen.copy(alpha = 0.45f)
+                        )
+                    }
                     if (item.actor != null) {
-                        Text(
-                            text = " • ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = item.actor,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Surface(
+                            color = BrandGreen.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = item.actor,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = BrandGreen.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
-
-val SuccessColor = androidx.compose.ui.graphics.Color(0xFF4CAF50)

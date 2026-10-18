@@ -6,19 +6,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.chuledigita.mobile.data.mock.MockDataProvider
-import com.chuledigita.mobile.domain.model.CreditStatus
 import com.chuledigita.mobile.domain.model.Customer
-import com.chuledigita.mobile.domain.model.RemainingBalanceStatus
 import com.chuledigita.mobile.ui.components.*
 import com.chuledigita.mobile.ui.navigation.Screen
 import kotlinx.coroutines.launch
@@ -50,8 +49,27 @@ fun CustomersScreen(
                     )
                 }
                 is CustomersUiState.Error -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(state.message, color = MaterialTheme.colorScheme.error)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewModel.refresh() }
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("እንደገና ሞክር")
+                        }
                     }
                 }
                 is CustomersUiState.Success -> {
@@ -88,11 +106,9 @@ fun CustomersScreen(
                 customerName = customer.name,
                 creditAmount = customer.creditAmount,
                 onConfirm = {
-                    MockDataProvider.updateCreditStatus(customer.id, CreditStatus.PAID_CREDIT)
-                    viewModel.refresh()
                     showPaymentDialog = null
                     scope.launch {
-                        snackbarHostState.showSnackbar("የደንበኛው ዕዳ ተከፍሏል። Paid: ${customer.creditAmount.toInt()} ETB")
+                        snackbarHostState.showSnackbar("ክፍያዎችን በፋይናንስ እንቅስቃሴ ክፍል ውስጥ ማስተናገድ ይችላሉ።")
                     }
                 },
                 onDismiss = { showPaymentDialog = null }
@@ -105,11 +121,9 @@ fun CustomersScreen(
                 customerName = customer.name,
                 balanceAmount = customer.remainingBalanceAmount,
                 onConfirm = {
-                    MockDataProvider.updateRemainingBalanceStatus(customer.id, RemainingBalanceStatus.BALANCE_COLLECTED)
-                    viewModel.refresh()
                     showCollectionDialog = null
                     scope.launch {
-                        snackbarHostState.showSnackbar("የደንበኛው ቀሪ ሂሳብ ተሰጥቷል። Received: ${customer.remainingBalanceAmount.toInt()} ETB")
+                        snackbarHostState.showSnackbar("የቀሪ ሂሳብ እንቅስቃሴዎችን በፋይናንስ ክፍል ውስጥ ማስተናገድ ይችላሉ።")
                     }
                 },
                 onDismiss = { showCollectionDialog = null }
@@ -158,14 +172,14 @@ fun CustomersList(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(filteredCustomers) { customer ->
+                items(filteredCustomers, key = { it.id }) { customer ->
                     CustomerCard(
                         customer = customer,
                         onClick = { onCustomerClick(customer) },
                         onEditClick = { onEditClick(customer) },
                         onPayCredit = { onPayCredit(customer) },
                         onCollectBalance = { onCollectBalance(customer) },
-                        isEditable = customer.createdBy == MockDataProvider.currentFamilyMember.name
+                        isEditable = false
                     )
                 }
             }

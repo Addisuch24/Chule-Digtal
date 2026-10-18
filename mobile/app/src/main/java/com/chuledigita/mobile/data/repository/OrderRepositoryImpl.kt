@@ -2,7 +2,10 @@ package com.chuledigita.mobile.data.repository
 
 import com.chuledigita.mobile.data.remote.ApiService
 import com.chuledigita.mobile.data.remote.model.CreateOrderRequest
+import com.chuledigita.mobile.data.remote.model.CreateOrderDirectRequest
+import com.chuledigita.mobile.data.remote.model.UpdateOrderRequest
 import com.chuledigita.mobile.data.remote.model.UpdateOrderStatusRequest
+import com.chuledigita.mobile.data.remote.model.VerificationRequest
 import com.chuledigita.mobile.data.remote.model.ApiErrorResponse
 import com.chuledigita.mobile.domain.model.Order
 import com.chuledigita.mobile.domain.model.OrderStatus
@@ -81,9 +84,79 @@ class OrderRepositoryImpl(
         }
     }
 
+    override suspend fun createOrderDirect(
+        orderNumber: String,
+        title: String,
+        description: String,
+        customerId: String?
+    ): Result<Order> {
+        return try {
+            val custIdLong = customerId?.toLongOrNull()
+            val response = apiService.createOrderDirect(
+                CreateOrderDirectRequest(
+                    orderNumber = orderNumber,
+                    title = title,
+                    description = description,
+                    customerId = custIdLong
+                )
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    Result.success(mapDtoToOrder(dto))
+                } else {
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዝ መፍጠር አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
+        }
+    }
+
+    override suspend fun updateOrder(orderId: String, title: String?, description: String?): Result<Order> {
+        return try {
+            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))
+            val response = apiService.updateOrder(
+                orderId = idLong,
+                request = UpdateOrderRequest(title = title, description = description)
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    Result.success(mapDtoToOrder(dto))
+                } else {
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዝ ማስተካከል አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
+        }
+    }
+
+    override suspend fun deleteOrder(orderId: String): Result<Unit> {
+        return try {
+            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))
+            val response = apiService.deleteOrder(idLong)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዝ መሰረዝ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
+        }
+    }
+
     override suspend fun updateOrderStatus(orderId: String, status: OrderStatus): Result<Order> {
         return try {
-            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("Invalid order target"))
+            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))
             val response = apiService.updateOrderStatus(
                 orderId = idLong,
                 request = UpdateOrderStatusRequest(orderStatus = status.name)
@@ -93,45 +166,98 @@ class OrderRepositoryImpl(
                 if (dto != null) {
                     Result.success(mapDtoToOrder(dto))
                 } else {
-                    Result.failure(Exception("Empty state modification package returned"))
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
                 }
             } else {
-                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to update order status")
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "የትዕዛዝ ሁኔታ መቀየር አልተቻለም።")
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Network error while updating state for current order item."))
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
+        }
+    }
+
+    override suspend fun verifyOrder(orderId: String, verificationNote: String?): Result<Order> {
+        return try {
+            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))
+            val response = apiService.verifyOrder(
+                orderId = idLong,
+                request = VerificationRequest(verificationNote = verificationNote ?: "")
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    Result.success(mapDtoToOrder(dto))
+                } else {
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዝ ማረጋገጥ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
+        }
+    }
+
+    override suspend fun rejectOrder(orderId: String, verificationNote: String): Result<Order> {
+        return try {
+            val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))
+            val response = apiService.rejectOrder(
+                orderId = idLong,
+                request = VerificationRequest(verificationNote = verificationNote)
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    Result.success(mapDtoToOrder(dto))
+                } else {
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዝ ውድቅ ማድረግ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል።"))
         }
     }
 
     private fun mapDtoToOrder(dto: com.chuledigita.mobile.data.remote.model.OrderDto): Order {
-        val domainStatus = try {
-            OrderStatus.valueOf(dto.orderStatus)
-        } catch (e: Exception) {
-            OrderStatus.PENDING
-        }
+        val domainStatus = dto.orderStatus?.let { statusStr ->
+            try {
+                OrderStatus.valueOf(statusStr)
+            } catch (e: Exception) {
+                OrderStatus.PENDING
+            }
+        } ?: OrderStatus.PENDING
 
-        val domainVerification = try {
-            VerificationStatus.valueOf(dto.verificationStatus)
-        } catch (e: Exception) {
-            VerificationStatus.PENDING
-        }
+        val domainVerification = dto.verificationStatus?.let { verStr ->
+            try {
+                VerificationStatus.valueOf(verStr)
+            } catch (e: Exception) {
+                VerificationStatus.PENDING
+            }
+        } ?: VerificationStatus.PENDING
+
+        val takenByText = dto.takenByName
+            ?: dto.takenBy?.let { "Family Member #$it" }
+            ?: "የቤተሰብ አባል"
 
         return Order(
             id = dto.id.toString(),
+            title = dto.title,
             orderNumber = dto.orderNumber,
-            customerId = dto.customerId.toString(),
-            customerName = dto.customerName ?: "Customer #${dto.customerId}",
+            customerId = dto.customerId?.toString() ?: "",
+            customerName = dto.customerName ?: if (dto.customerId != null) "Customer #${dto.customerId}" else "አጠቃላይ ደንበኛ",
             description = dto.description ?: "",
             orderDate = DateTimeUtils.formatDate(dto.createdAt),
             orderTime = DateTimeUtils.formatTime(dto.createdAt),
-            totalAmount = 0.0, 
+            totalAmount = 0.0,
             status = domainStatus,
             verificationStatus = domainVerification,
             verificationNote = dto.verificationNote,
-            takenByFamilyMember = dto.takenByName ?: "Family Member #${dto.takenBy}",
-            // Backend gap: completion actor and time not explicitly tracked in order table for non-verification status changes.
-            // Using updated_at as a fallback for completion time if status is COMPLETED.
+            takenByFamilyMember = takenByText,
             completionActor = if (domainStatus == OrderStatus.COMPLETED) (dto.verifiedByName ?: dto.takenByName) else null,
             completionDate = if (domainStatus == OrderStatus.COMPLETED) DateTimeUtils.formatDate(dto.updatedAt) else null,
             completionTime = if (domainStatus == OrderStatus.COMPLETED) DateTimeUtils.formatTime(dto.updatedAt) else null,

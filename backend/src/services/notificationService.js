@@ -1,5 +1,6 @@
 const notificationModel = require("../models/notificationModel");
 const socketService = require("./socketService");
+const pool = require("../config/db");
 
 async function sendNotification({
   recipientId,
@@ -33,21 +34,43 @@ async function sendNotificationToMembers({
   title,
   message,
 }) {
-  const notifications = [];
+  if (!recipientIds || recipientIds.length === 0) return [];
 
-  for (const recipientId of recipientIds) {
-    const notification = await sendNotification({
-      recipientId,
-      activityId,
+  // Batch insert all member notifications in a single fast query
+  const values = recipientIds.map((id) => [
+    id,
+    activityId || null,
+    notificationType,
+    title,
+    message,
+  ]);
+
+  await pool.query(
+    `
+      INSERT INTO notifications (
+        recipient_id,
+        activity_id,
+        notification_type,
+        title,
+        message
+      )
+      VALUES ?
+    `,
+    [values]
+  );
+
+  // Emit socket events to connected sockets
+  recipientIds.forEach((id) => {
+    socketService.emitToUser(id, "notification:new", {
+      activityId: activityId || null,
       notificationType,
       title,
       message,
+      isRead: false,
     });
+  });
 
-    notifications.push(notification);
-  }
-
-  return notifications;
+  return [];
 }
 
 module.exports = {

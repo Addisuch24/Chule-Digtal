@@ -8,6 +8,7 @@ const navigation = [
   { to: "/orders", label: "Orders", marker: "03" },
   { to: "/finance", label: "Finance", marker: "04" },
   { to: "/notifications", label: "Notifications", marker: "05" },
+  { to: "/profile", label: "Profile", marker: "06" },
 ];
 
 function MainLayout() {

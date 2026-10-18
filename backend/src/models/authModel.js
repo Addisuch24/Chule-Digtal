@@ -1,20 +1,49 @@
 const pool = require("../config/db");
 
 async function findFamilyMemberByUsername(username) {
+  const normalized = username ? username.trim().toLowerCase() : "";
   const [rows] = await pool.execute(
     `
       SELECT
         id,
         full_name,
         phone,
+        email,
         username,
         password_hash,
-        is_active
+        is_active,
+        created_at,
+        updated_at
       FROM family_members
-      WHERE username = ?
+      WHERE LOWER(username) = LOWER(?)
       LIMIT 1
     `,
-    [username]
+    [normalized]
+  );
+
+  return rows[0] || null;
+}
+
+async function findFamilyMemberByEmail(email) {
+  if (!email) return null;
+  const normalized = email.trim().toLowerCase();
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        id,
+        full_name,
+        phone,
+        email,
+        username,
+        password_hash,
+        is_active,
+        created_at,
+        updated_at
+      FROM family_members
+      WHERE LOWER(email) = LOWER(?)
+      LIMIT 1
+    `,
+    [normalized]
   );
 
   return rows[0] || null;
@@ -27,8 +56,11 @@ async function findFamilyMemberById(id) {
         id,
         full_name,
         phone,
+        email,
         username,
-        is_active
+        is_active,
+        created_at,
+        updated_at
       FROM family_members
       WHERE id = ?
       LIMIT 1
@@ -42,6 +74,7 @@ async function findFamilyMemberById(id) {
 async function createFamilyMember(
   fullName,
   phone,
+  email,
   username,
   passwordHash
 ) {
@@ -51,16 +84,18 @@ async function createFamilyMember(
       (
         full_name,
         phone,
+        email,
         username,
         password_hash,
         is_active
       )
-      VALUES (?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, 1)
     `,
     [
-      fullName,
-      phone || null,
-      username,
+      fullName.trim(),
+      phone && phone.trim() ? phone.trim() : null,
+      email && email.trim() ? email.trim().toLowerCase() : null,
+      username.trim().toLowerCase(),
       passwordHash,
     ]
   );
@@ -70,6 +105,7 @@ async function createFamilyMember(
 
 module.exports = {
   findFamilyMemberByUsername,
+  findFamilyMemberByEmail,
   findFamilyMemberById,
   createFamilyMember,
 };

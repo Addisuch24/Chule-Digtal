@@ -26,14 +26,20 @@ class CustomerRepositoryImpl(
             val response = apiService.getAllCustomers()
             if (response.isSuccessful && response.body()?.success == true) {
                 val list = response.body()?.data?.map { dto ->
+                    val debit = dto.totalDebit ?: 0.0
+                    val bal = dto.balance ?: 0.0
                     Customer(
                         id = dto.id.toString(),
                         name = dto.fullName,
                         phone = dto.phone,
-                        createdBy = dto.createdBy.toString(),
+                        createdBy = dto.createdByName ?: dto.createdBy.toString(),
                         createdDate = dto.createdAt,
-                        updatedDate = dto.createdAt,
-                        registrationDate = dto.createdAt
+                        updatedDate = dto.updatedAt ?: dto.createdAt,
+                        registrationDate = dto.createdAt,
+                        creditAmount = debit,
+                        creditStatus = if (debit > 0) CreditStatus.UNPAID_CREDIT else CreditStatus.PAID_CREDIT,
+                        remainingBalanceAmount = bal,
+                        remainingBalanceStatus = if (bal > 0) RemainingBalanceStatus.REMAINING_BALANCE else RemainingBalanceStatus.BALANCE_COLLECTED
                     )
                 } ?: emptyList()
                 Result.success(list)
@@ -53,18 +59,20 @@ class CustomerRepositoryImpl(
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data
                 if (dto != null) {
+                    val debit = dto.totalDebit ?: 0.0
+                    val bal = dto.balance ?: 0.0
                     val customer = Customer(
                         id = dto.id.toString(),
                         name = dto.fullName,
                         phone = dto.phone,
-                        createdBy = dto.createdBy.toString(),
+                        createdBy = dto.createdByName ?: dto.createdBy.toString(),
                         createdDate = dto.createdAt,
-                        updatedDate = dto.updatedAt,
+                        updatedDate = dto.updatedAt ?: dto.createdAt,
                         registrationDate = dto.createdAt,
-                        creditAmount = dto.totalDebit,
-                        creditStatus = if (dto.balance > 0) CreditStatus.UNPAID_CREDIT else CreditStatus.PAID_CREDIT,
-                        remainingBalanceAmount = dto.balance,
-                        remainingBalanceStatus = if (dto.balance > 0) RemainingBalanceStatus.REMAINING_BALANCE else RemainingBalanceStatus.BALANCE_COLLECTED
+                        creditAmount = debit,
+                        creditStatus = if (debit > 0) CreditStatus.UNPAID_CREDIT else CreditStatus.PAID_CREDIT,
+                        remainingBalanceAmount = bal,
+                        remainingBalanceStatus = if (bal > 0) RemainingBalanceStatus.REMAINING_BALANCE else RemainingBalanceStatus.BALANCE_COLLECTED
                     )
                     Result.success(customer)
                 } else {
@@ -81,7 +89,12 @@ class CustomerRepositoryImpl(
 
     override suspend fun createCustomer(name: String, phone: String?): Result<Customer> {
         return try {
-            val response = apiService.createCustomer(CreateCustomerRequest(fullName = name, phone = phone))
+            val response = apiService.createCustomer(
+                CreateCustomerRequest(
+                    fullName = name.trim(),
+                    phone = phone?.trim()?.takeIf { it.isNotEmpty() }
+                )
+            )
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data
                 if (dto != null) {
@@ -89,10 +102,14 @@ class CustomerRepositoryImpl(
                         id = dto.id.toString(),
                         name = dto.fullName,
                         phone = dto.phone,
-                        createdBy = dto.createdBy.toString(),
+                        createdBy = dto.createdByName ?: dto.createdBy.toString(),
                         createdDate = dto.createdAt,
-                        updatedDate = dto.createdAt,
-                        registrationDate = dto.createdAt
+                        updatedDate = dto.updatedAt ?: dto.createdAt,
+                        registrationDate = dto.createdAt,
+                        creditAmount = dto.totalDebit ?: 0.0,
+                        creditStatus = CreditStatus.PAID_CREDIT,
+                        remainingBalanceAmount = dto.balance ?: 0.0,
+                        remainingBalanceStatus = RemainingBalanceStatus.BALANCE_COLLECTED
                     )
                     Result.success(customer)
                 } else {
@@ -103,7 +120,7 @@ class CustomerRepositoryImpl(
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Network error while creating new customer profile profile."))
+            Result.failure(Exception(e.message ?: "Network error while creating new customer profile."))
         }
     }
 

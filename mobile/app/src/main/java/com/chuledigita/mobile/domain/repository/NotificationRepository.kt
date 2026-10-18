@@ -1,10 +1,11 @@
 package com.chuledigita.mobile.domain.repository
 
 import com.chuledigita.mobile.domain.model.NotificationItem
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Domain repository for managing business notifications.
+ * Domain repository for managing business notifications and real-time event synchronization.
  */
 interface NotificationRepository {
     /**
@@ -16,6 +17,11 @@ interface NotificationRepository {
      * Flow of unread notification count.
      */
     val unreadCount: StateFlow<Int>
+
+    /**
+     * Shared flow emitting real-time notification events as they arrive over Socket.IO.
+     */
+    val realtimeEventFlow: SharedFlow<NotificationItem>
 
     /**
      * Fetches fresh notifications from the backend.

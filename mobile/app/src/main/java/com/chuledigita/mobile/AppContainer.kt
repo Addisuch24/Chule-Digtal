@@ -10,12 +10,14 @@ import com.chuledigita.mobile.data.repository.ApiRepository
 import com.chuledigita.mobile.data.repository.ApiRepositoryImpl
 import com.chuledigita.mobile.data.repository.AuthRepositoryImpl
 import com.chuledigita.mobile.data.repository.CustomerRepositoryImpl
+import com.chuledigita.mobile.data.repository.FinancialRepositoryImpl
 import com.chuledigita.mobile.data.repository.NoteRepositoryImpl
 import com.chuledigita.mobile.data.repository.NotificationRepositoryImpl
 import com.chuledigita.mobile.data.repository.OrderRepositoryImpl
 import com.chuledigita.mobile.data.repository.SessionRepositoryImpl
 import com.chuledigita.mobile.domain.repository.AuthRepository
 import com.chuledigita.mobile.domain.repository.CustomerRepository
+import com.chuledigita.mobile.domain.repository.FinancialRepository
 import com.chuledigita.mobile.domain.repository.NoteRepository
 import com.chuledigita.mobile.domain.repository.NotificationRepository
 import com.chuledigita.mobile.domain.repository.OrderRepository
@@ -35,6 +37,7 @@ interface AppContainer {
     val noteRepository: NoteRepository
     val socketManager: SocketManager
     val notificationRepository: NotificationRepository
+    val financialRepository: FinancialRepository
 }
 
 /**
@@ -76,6 +79,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val noteRepository: NoteRepository by lazy {
         NoteRepositoryImpl(apiService)
+    }
+
+    override val financialRepository: FinancialRepository by lazy {
+        FinancialRepositoryImpl(apiService)
     }
 
     override val notificationRepository: NotificationRepository by lazy {

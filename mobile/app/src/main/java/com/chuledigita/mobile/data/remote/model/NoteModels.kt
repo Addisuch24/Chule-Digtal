@@ -14,7 +14,7 @@ data class CreateNoteRequest(
  */
 data class NoteDto(
     val id: Long,
-    @SerializedName("customer_id") val customerId: Long,
+    @SerializedName("customer_id") val customerId: Long? = null,
     @SerializedName("note_text") val noteText: String,
     @SerializedName("created_by") val createdBy: Long,
     @SerializedName("created_by_name") val createdByName: String?,

@@ -8,6 +8,7 @@ data class UserSession(
     val id: Long,
     val fullName: String,
     val phone: String,
+    val email: String? = null,
     val username: String,
     val isActive: Boolean,
     val token: String

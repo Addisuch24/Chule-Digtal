@@ -22,18 +22,7 @@ class FinancialRepositoryImpl(
             val response = apiService.getAllFinancialMovements()
             if (response.isSuccessful && response.body()?.success == true) {
                 val list = response.body()?.data?.map { dto ->
-                    FinancialMovement(
-                        id = dto.id.toString(),
-                        customerId = dto.customerId.toString(),
-                        customerName = dto.customerName ?: "Customer #${dto.customerId}",
-                        type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
-                        amount = dto.amount,
-                        date = DateTimeUtils.formatDate(dto.transactionAt),
-                        description = dto.description ?: "",
-                        recordedBy = dto.recordedByName ?: "Member #${dto.recordedBy}",
-                        verificationStatus = try { VerificationStatus.valueOf(dto.verificationStatus) } catch (e: Exception) { VerificationStatus.PENDING },
-                        verificationNote = dto.verificationNote
-                    )
+                    mapDtoToMovement(dto)
                 } ?: emptyList()
                 Result.success(list)
             } else {
@@ -51,20 +40,7 @@ class FinancialRepositoryImpl(
             val response = apiService.getFinancialMovementById(idLong)
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data!!
-                Result.success(
-                    FinancialMovement(
-                        id = dto.id.toString(),
-                        customerId = dto.customerId.toString(),
-                        customerName = dto.customerName ?: "Customer #${dto.customerId}",
-                        type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
-                        amount = dto.amount,
-                        date = DateTimeUtils.formatDate(dto.transactionAt),
-                        description = dto.description ?: "",
-                        recordedBy = dto.recordedByName ?: "Member #${dto.recordedBy}",
-                        verificationStatus = try { VerificationStatus.valueOf(dto.verificationStatus) } catch (e: Exception) { VerificationStatus.PENDING },
-                        verificationNote = dto.verificationNote
-                    )
-                )
+                Result.success(mapDtoToMovement(dto))
             } else {
                 Result.failure(Exception("Movement not found"))
             }
@@ -91,19 +67,7 @@ class FinancialRepositoryImpl(
             )
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data!!
-                Result.success(
-                    FinancialMovement(
-                        id = dto.id.toString(),
-                        customerId = dto.customerId.toString(),
-                        customerName = dto.customerName ?: "Customer",
-                        type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
-                        amount = dto.amount,
-                        date = DateTimeUtils.formatDate(dto.transactionAt),
-                        description = dto.description ?: "",
-                        recordedBy = dto.recordedByName ?: "Member",
-                        verificationStatus = try { VerificationStatus.valueOf(dto.verificationStatus) } catch (e: Exception) { VerificationStatus.PENDING }
-                    )
-                )
+                Result.success(mapDtoToMovement(dto))
             } else {
                 val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to record movement")
                 Result.failure(Exception(errorMsg))
@@ -113,26 +77,59 @@ class FinancialRepositoryImpl(
         }
     }
 
+    override suspend fun updateMovement(
+        movementId: String,
+        customerId: String,
+        amount: Double,
+        type: MovementType,
+        description: String
+    ): Result<FinancialMovement> {
+        return try {
+            val idLong = movementId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))
+            val custIdLong = customerId.toLongOrNull() ?: return Result.failure(Exception("Invalid customer ID"))
+            val response = apiService.updateFinancialMovement(
+                idLong,
+                CreateFinancialMovementRequest(
+                    customerId = custIdLong,
+                    amount = amount,
+                    movementType = type.name,
+                    description = description
+                )
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data!!
+                Result.success(mapDtoToMovement(dto))
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to update movement")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun deleteMovement(movementId: String): Result<Unit> {
+        return try {
+            val idLong = movementId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))
+            val response = apiService.deleteFinancialMovement(idLong)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete movement")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun verifyMovement(movementId: String, note: String): Result<FinancialMovement> {
         return try {
             val idLong = movementId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))
             val response = apiService.verifyFinancialMovement(idLong, VerificationRequest(note))
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data!!
-                Result.success(
-                    FinancialMovement(
-                        id = dto.id.toString(),
-                        customerId = dto.customerId.toString(),
-                        customerName = dto.customerName ?: "Customer",
-                        type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
-                        amount = dto.amount,
-                        date = DateTimeUtils.formatDate(dto.transactionAt),
-                        description = dto.description ?: "",
-                        recordedBy = dto.recordedByName ?: "Member",
-                        verificationStatus = VerificationStatus.VERIFIED,
-                        verificationNote = dto.verificationNote
-                    )
-                )
+                Result.success(mapDtoToMovement(dto))
             } else {
                 Result.failure(Exception("Verification failed"))
             }
@@ -147,26 +144,28 @@ class FinancialRepositoryImpl(
             val response = apiService.rejectFinancialMovement(idLong, VerificationRequest(note))
             if (response.isSuccessful && response.body()?.success == true) {
                 val dto = response.body()?.data!!
-                Result.success(
-                    FinancialMovement(
-                        id = dto.id.toString(),
-                        customerId = dto.customerId.toString(),
-                        customerName = dto.customerName ?: "Customer",
-                        type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
-                        amount = dto.amount,
-                        date = DateTimeUtils.formatDate(dto.transactionAt),
-                        description = dto.description ?: "",
-                        recordedBy = dto.recordedByName ?: "Member",
-                        verificationStatus = VerificationStatus.REJECTED,
-                        verificationNote = dto.verificationNote
-                    )
-                )
+                Result.success(mapDtoToMovement(dto))
             } else {
                 Result.failure(Exception("Rejection failed"))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun mapDtoToMovement(dto: com.chuledigita.mobile.data.remote.model.FinancialMovementDto): FinancialMovement {
+        return FinancialMovement(
+            id = dto.id.toString(),
+            customerId = dto.customerId.toString(),
+            customerName = dto.customerName ?: "Customer #${dto.customerId}",
+            type = try { MovementType.valueOf(dto.movementType) } catch (e: Exception) { MovementType.DEBIT },
+            amount = dto.amount,
+            date = DateTimeUtils.formatDate(dto.transactionAt),
+            description = dto.description ?: "",
+            recordedBy = dto.recordedByName ?: "Member #${dto.recordedBy}",
+            verificationStatus = try { VerificationStatus.valueOf(dto.verificationStatus) } catch (e: Exception) { VerificationStatus.PENDING },
+            verificationNote = dto.verificationNote
+        )
     }
 
     private fun parseErrorMessage(errorBodyJson: String?, fallback: String): String {

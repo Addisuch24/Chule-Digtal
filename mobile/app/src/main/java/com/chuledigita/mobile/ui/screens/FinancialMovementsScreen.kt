@@ -19,8 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.chuledigita.mobile.data.mock.MockDataProvider
 import com.chuledigita.mobile.domain.model.FinancialMovement
 import com.chuledigita.mobile.domain.model.MovementType
 import com.chuledigita.mobile.ui.components.MainScaffold
@@ -31,111 +32,137 @@ import com.chuledigita.mobile.ui.theme.SuccessColor
 
 @Composable
 fun FinancialMovementsScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: FinancialMovementsViewModel = viewModel(factory = FinancialMovementsViewModel.Factory)
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedTypeFilter by remember { mutableStateOf<MovementType?>(null) }
-    
-    val allMovements = MockDataProvider.financialMovements
-    val filteredMovements = remember(searchQuery, selectedTypeFilter) {
-        allMovements.filter {
-            val matchesSearch = it.customerName.contains(searchQuery, ignoreCase = true) || 
-                               it.description.contains(searchQuery, ignoreCase = true)
-            val matchesType = selectedTypeFilter == null || it.type == selectedTypeFilter
-            matchesSearch && matchesType
-        }
-    }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     MainScaffold(
         navController = navController,
         title = "Movement History",
         showBottomBar = false
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Filter & Search Header
-            Surface(
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search customer or description...") },
-                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+            when (val state = uiState) {
+                is FinancialMovementsUiState.Loading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is FinancialMovementsUiState.Error -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                            Button(
+                                onClick = { viewModel.loadMovements() },
+                                modifier = Modifier.padding(top = 16.dp)
+                            ) {
+                                Text("እንደገና ሞክር")
+                            }
+                        }
+                    }
+                }
+
+                is FinancialMovementsUiState.Success -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Filter & Search Header
+                        Surface(
+                            tonalElevation = 2.dp,
+                            shadowElevation = 2.dp,
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = state.searchQuery,
+                                    onValueChange = viewModel::onSearchQueryChanged,
+                                    placeholder = { Text("Search customer or description...") },
+                                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                                    trailingIcon = {
+                                        if (state.searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = state.selectedTypeFilter == null,
+                                        onClick = { viewModel.onTypeFilterChanged(null) },
+                                        label = { Text("All") },
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    FilterChip(
+                                        selected = state.selectedTypeFilter == MovementType.DEBIT,
+                                        onClick = { viewModel.onTypeFilterChanged(MovementType.DEBIT) },
+                                        label = { Text("Debits") },
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    FilterChip(
+                                        selected = state.selectedTypeFilter == MovementType.CREDIT,
+                                        onClick = { viewModel.onTypeFilterChanged(MovementType.CREDIT) },
+                                        label = { Text("Credits") },
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
                                 }
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                        }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = selectedTypeFilter == null,
-                            onClick = { selectedTypeFilter = null },
-                            label = { Text("All") },
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        FilterChip(
-                            selected = selectedTypeFilter == MovementType.DEBIT,
-                            onClick = { selectedTypeFilter = MovementType.DEBIT },
-                            label = { Text("Debits") },
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        FilterChip(
-                            selected = selectedTypeFilter == MovementType.CREDIT,
-                            onClick = { selectedTypeFilter = MovementType.CREDIT },
-                            label = { Text("Credits") },
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                    }
-                }
-            }
-
-            if (filteredMovements.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Outlined.History, 
-                            contentDescription = null, 
-                            modifier = Modifier.size(64.dp), 
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No records found", color = MaterialTheme.colorScheme.outline)
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 40.dp)
-                ) {
-                    items(filteredMovements, key = { it.id }) { movement ->
-                        MovementItemCard(
-                            movement = movement,
-                            onClick = { 
-                                navController.navigate(Screen.FinancialMovementDetails.createRoute(movement.id))
+                        if (state.filteredMovements.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Outlined.History,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text("No records found", color = MaterialTheme.colorScheme.outline)
+                                }
                             }
-                        )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 40.dp)
+                            ) {
+                                items(state.filteredMovements, key = { it.id }) { movement ->
+                                    MovementItemCard(
+                                        movement = movement,
+                                        onClick = {
+                                            navController.navigate(Screen.FinancialMovementDetails.createRoute(movement.id))
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -177,19 +204,19 @@ fun MovementItemCard(
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = movement.customerName, 
-                    style = MaterialTheme.typography.titleSmall, 
+                    text = movement.customerName,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = movement.description, 
-                    style = MaterialTheme.typography.bodySmall, 
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, 
+                    text = movement.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
                 Text(
-                    text = movement.date, 
-                    style = MaterialTheme.typography.labelSmall, 
+                    text = movement.date,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
             }

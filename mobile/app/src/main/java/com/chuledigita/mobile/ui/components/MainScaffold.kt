@@ -19,6 +19,14 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.chuledigita.mobile.ui.navigation.Screen
 
+/**
+ * Represents a navigation item in the bottom navigation bar.
+ *
+ * @property screen The target [Screen] associated with this navigation item.
+ * @property filledIcon The icon to display when the item is selected (can be an [ImageVector] or Drawable [Int] resource).
+ * @property outlinedIcon The icon to display when the item is unselected (can be an [ImageVector] or Drawable [Int] resource).
+ * @property label The display label for the navigation item.
+ */
 data class AppNavigationItem(
     val screen: Screen,
     val filledIcon: Any, // Can be ImageVector or Int resource
@@ -26,6 +34,17 @@ data class AppNavigationItem(
     val label: String
 )
 
+/**
+ * A reusable scaffold component that provides a consistent layout structure across the app,
+ * including a top app bar, bottom navigation bar, floating action button, and surface container.
+ *
+ * @param navController The [NavHostController] used for handling navigation actions.
+ * @param title The title text displayed in the center of the top app bar.
+ * @param onLogout Callback triggered when the user initiates a logout action.
+ * @param showBottomBar Whether to display the bottom navigation bar. Defaults to `true`.
+ * @param floatingActionButton Optional floating action button composable to display over the content.
+ * @param content The main screen content composable, receiving [PaddingValues] to apply proper window insets.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold(
@@ -83,9 +102,10 @@ fun MainScaffold(
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
                     val items = listOf(
-                        AppNavigationItem(Screen.Customers, Icons.Filled.People, Icons.Outlined.People, "Customers"),
+                        AppNavigationItem(Screen.Dashboard, Icons.Filled.Dashboard, Icons.Outlined.Dashboard, "Dashboard"),
+                        AppNavigationItem(Screen.Notes, Icons.AutoMirrored.Filled.Notes, Icons.AutoMirrored.Outlined.Notes, "Notes"),
                         AppNavigationItem(Screen.Orders, Icons.Filled.Receipt, Icons.Outlined.Receipt, "Orders"),
-                        AppNavigationItem(Screen.Notes, Icons.AutoMirrored.Filled.Notes, Icons.AutoMirrored.Outlined.Notes, "Notes")
+                        AppNavigationItem(Screen.Finance, Icons.Filled.Payments, Icons.Outlined.Payments, "Finance")
                     )
 
                     items.forEach { item ->
@@ -103,9 +123,10 @@ fun MainScaffold(
                             },
                             label = { 
                                 val localizedLabel = when(item.label) {
-                                    "Customers" -> "ደንበኞች"
-                                    "Orders" -> "ትዕዛዞች"
+                                    "Dashboard" -> "ዳሽቦርድ"
                                     "Notes" -> "ማስታወሻዎች"
+                                    "Orders" -> "ትዕዛዞች"
+                                    "Finance" -> "ፋይናንስ"
                                     else -> item.label
                                 }
                                 Text(
@@ -118,7 +139,9 @@ fun MainScaffold(
                             onClick = {
                                 if (!isSelected) {
                                     navController.navigate(item.screen.route) {
-                                        popUpTo(Screen.Customers.route) { saveState = true }
+                                        popUpTo(Screen.Dashboard.route) {
+                                            saveState = true
+                                        }
                                         launchSingleTop = true
                                         restoreState = true
                                     }

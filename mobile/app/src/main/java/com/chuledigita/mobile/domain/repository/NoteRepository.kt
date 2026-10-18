@@ -17,6 +17,16 @@ interface NoteRepository {
     suspend fun createGlobalNote(text: String): Result<CustomerNote>
 
     /**
+     * Updates an existing global shared family-business note.
+     */
+    suspend fun updateGlobalNote(noteId: String, text: String): Result<CustomerNote>
+
+    /**
+     * Deletes a global shared family-business note.
+     */
+    suspend fun deleteGlobalNote(noteId: String): Result<Unit>
+
+    /**
      * Retrieves chronological communication or tracking notes for a customer profile.
      */
     suspend fun getCustomerNotes(customerId: String): Result<List<CustomerNote>>

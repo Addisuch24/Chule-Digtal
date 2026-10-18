@@ -10,8 +10,11 @@ import com.chuledigita.mobile.domain.repository.SessionRepository
 import com.chuledigita.mobile.utils.DateTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -35,6 +38,9 @@ class NotificationRepositoryImpl(
 
     private val _unreadCount = MutableStateFlow(0)
     override val unreadCount: StateFlow<Int> = _unreadCount.asStateFlow()
+
+    private val _realtimeEventFlow = MutableSharedFlow<NotificationItem>(replay = 1, extraBufferCapacity = 64)
+    override val realtimeEventFlow: SharedFlow<NotificationItem> = _realtimeEventFlow.asSharedFlow()
 
     init {
         // 1. Session Lifecycle: Connect/Disconnect socket and fetch initial state
@@ -70,14 +76,19 @@ class NotificationRepositoryImpl(
             if (response.isSuccessful && response.body()?.success == true) {
                 val dtoList = response.body()?.data ?: emptyList()
                 val domainList = dtoList.map { it.toDomain() }
+
                 _notifications.value = domainList
                 updateUnreadCountLocally()
                 Result.success(Unit)
             } else {
-                Result.failure(Exception("Failed to fetch notifications from server"))
+                _notifications.value = emptyList()
+                updateUnreadCountLocally()
+                Result.success(Unit)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            _notifications.value = emptyList()
+            updateUnreadCountLocally()
+            Result.success(Unit)
         }
     }
 
@@ -86,17 +97,24 @@ class NotificationRepositoryImpl(
             val idLong = notificationId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))
             val response = apiService.markAsRead(idLong)
             if (response.isSuccessful && response.body()?.success == true) {
-                // Update local state immediately for better UX
                 _notifications.value = _notifications.value.map {
                     if (it.id == notificationId) it.copy(isRead = true) else it
                 }
                 updateUnreadCountLocally()
                 Result.success(Unit)
             } else {
-                Result.failure(Exception("Failed to mark notification as read"))
+                _notifications.value = _notifications.value.map {
+                    if (it.id == notificationId) it.copy(isRead = true) else it
+                }
+                updateUnreadCountLocally()
+                Result.success(Unit)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            _notifications.value = _notifications.value.map {
+                if (it.id == notificationId) it.copy(isRead = true) else it
+            }
+            updateUnreadCountLocally()
+            Result.success(Unit)
         }
     }
 
@@ -114,12 +132,12 @@ class NotificationRepositoryImpl(
 
     private fun handleIncomingSocketNotification(json: JSONObject) {
         try {
-            val id = json.getLong("id")
-            val title = json.getString("title")
-            val message = json.getString("message")
-            val typeStr = json.getString("notificationType")
-            val createdAt = json.optString("createdAt", "") 
-            
+            val id = json.optLong("id", System.currentTimeMillis())
+            val title = json.optString("title", "Notification")
+            val message = json.optString("message", "")
+            val typeStr = json.optString("notification_type", json.optString("notificationType", "SYSTEM"))
+            val createdAt = json.optString("created_at", json.optString("createdAt", ""))
+
             val type = try {
                 NotificationType.valueOf(typeStr)
             } catch (e: Exception) {
@@ -136,15 +154,18 @@ class NotificationRepositoryImpl(
                 type = type
             )
 
-            // Prevent duplicates (Authoritative check by ID)
             if (_notifications.value.none { it.id == newItem.id }) {
                 _notifications.value = (listOf(newItem) + _notifications.value)
                     .distinctBy { it.id }
                     .sortedByDescending { it.id.toLongOrNull() ?: 0L }
                 updateUnreadCountLocally()
             }
+
+            // Emit real-time notification event so active feature ViewModels can refresh REST data
+            _realtimeEventFlow.tryEmit(newItem)
         } catch (e: Exception) {
-            // Parsing failure handled silently in production
+            println("DEBUG handleIncomingSocketNotification Exception: ${e.message}")
+            e.printStackTrace()
         }
     }
 

@@ -18,4 +18,5 @@ interface SessionRepository {
     suspend fun saveSession(session: UserSession)
     suspend fun saveToken(token: String)
     suspend fun clearSession()
+    fun clearSessionSync()
 }

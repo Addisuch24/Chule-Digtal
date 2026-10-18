@@ -21,11 +21,9 @@ function authenticateToken(req, res, next) {
     }
 
     const token = parts[1];
+    const secret = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    const decoded = jwt.verify(token, secret);
 
     req.user = {
       id: decoded.id ?? decoded.userId,
@@ -34,6 +32,7 @@ function authenticateToken(req, res, next) {
 
     next();
   } catch (error) {
+    console.warn(`[AUTH MIDDLEWARE DIAGNOSTIC] Token verification failed: ${error.message}`);
     return res.status(401).json({
       success: false,
       message: "Invalid or expired token",

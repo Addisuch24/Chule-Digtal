@@ -5,6 +5,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
+object ThemeManager {
+    var selectedTheme by mutableStateOf("System Default")
+}
 
 private val DarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
@@ -42,9 +49,14 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun ChuleDigitalTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = when (ThemeManager.selectedTheme) {
+        "Light Mode" -> false
+        "Dark Mode" -> true
+        else -> systemDark
+    }
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(

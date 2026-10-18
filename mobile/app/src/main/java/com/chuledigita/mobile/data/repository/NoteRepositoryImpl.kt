@@ -71,6 +71,51 @@ class NoteRepositoryImpl(
         }
     }
 
+    override suspend fun updateGlobalNote(noteId: String, text: String): Result<CustomerNote> {
+        return try {
+            val idLong = noteId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የማስታወሻ መለያ"))
+            val response = apiService.updateGlobalNote(idLong, CreateNoteRequest(noteText = text))
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    val note = CustomerNote(
+                        id = dto.id.toString(),
+                        customerId = "",
+                        note = dto.noteText,
+                        date = DateTimeUtils.formatDate(dto.createdAt),
+                        time = DateTimeUtils.formatTime(dto.createdAt),
+                        authorName = dto.createdByName ?: "የቤተሰብ አባል"
+                    )
+                    Result.success(note)
+                } else {
+                    Result.failure(Exception("ባዶ ምላሽ ደርሷል።"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ማስታወሻውን ማስተካከል አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል። እባክዎ ግንኙነትዎን ያረጋግጡ።"))
+        }
+    }
+
+    override suspend fun deleteGlobalNote(noteId: String): Result<Unit> {
+        return try {
+            val idLong = noteId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የማስታወሻ መለያ"))
+            val response = apiService.deleteGlobalNote(idLong)
+
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ማስታወሻውን መሰረዝ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል። እባክዎ ግንኙነትዎን ያረጋግጡ።"))
+        }
+    }
+
     override suspend fun getCustomerNotes(customerId: String): Result<List<CustomerNote>> {
         return try {
             val idLong = customerId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የደንበኛ መለያ"))

@@ -24,7 +24,32 @@ interface OrderRepository {
     suspend fun createOrder(customerId: String, orderNumber: String, description: String?): Result<Order>
 
     /**
+     * Creates an order with title and details matching web interface.
+     */
+    suspend fun createOrderDirect(orderNumber: String, title: String, description: String, customerId: String? = null): Result<Order>
+
+    /**
+     * Updates an order's title and description.
+     */
+    suspend fun updateOrder(orderId: String, title: String?, description: String?): Result<Order>
+
+    /**
+     * Deletes an order.
+     */
+    suspend fun deleteOrder(orderId: String): Result<Unit>
+
+    /**
      * Updates the status of an existing order profile.
      */
     suspend fun updateOrderStatus(orderId: String, status: OrderStatus): Result<Order>
+
+    /**
+     * Verifies an order.
+     */
+    suspend fun verifyOrder(orderId: String, verificationNote: String? = null): Result<Order>
+
+    /**
+     * Rejects an order with a mandatory verification note.
+     */
+    suspend fun rejectOrder(orderId: String, verificationNote: String): Result<Order>
 }

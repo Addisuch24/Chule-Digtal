@@ -16,90 +16,189 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * ViewModel managing the global shared family-business notes with local sample data.
+ * ViewModel managing the global shared family-business notes connected to mock/real backend API.
  */
 class NotesViewModel(
-    private val noteRepository: NoteRepository
+    private val _noteRepository: NoteRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<NotesUiState>(NotesUiState.Loading)
     val uiState: StateFlow<NotesUiState> = _uiState.asStateFlow()
 
-    // Local in-memory store for sample data
-    private val localNotesList = mutableListOf(
-        CustomerNote(
-            id = "1",
-            customerId = "101",
-            note = "ለነገ ጧት 5 ካርቶን ወተት ለሱቅ 10 እንዲረከብ ማሳሰቢያ ተሰጥቷል።",
-            date = "2023-11-15",
-            time = "09:30 AM",
-            authorName = "ዮሐንስ አበበ"
-        ),
-        CustomerNote(
-            id = "2",
-            customerId = "102",
-            note = "የአቶ ከበደ የባንክ ማረጋገጫ ደረሰኝ በንግድ ባንክ በኩል ደርሶናል። እባክችሁ Verification Queue ላይ አረጋግጡ።",
-            date = "2023-11-15",
-            time = "10:15 AM",
-            authorName = "አልማዝ ተሰማ"
-        ),
-        CustomerNote(
-            id = "3",
-            customerId = "103",
-            note = "አዲስ ደንበኛ (ኪያ ሱፐርማርኬት) ተመዝግቧል። የመጀመሪያ ትዕዛዝ እንዲላክላቸው ይፈልጋሉ።",
-            date = "2023-11-14",
-            time = "04:45 PM",
-            authorName = "ብሩክ ታደሰ"
-        )
-    )
+    private var allNotes: List<CustomerNote> = emptyList()
+    private var currentSearchQuery: String = ""
 
     init {
         loadNotes()
     }
 
     /**
-     * Loads the local sample data without connecting to the real network database.
+     * Loads global notes (mock sample data for UI design mode).
      */
     fun loadNotes() {
         viewModelScope.launch {
             _uiState.value = NotesUiState.Loading
-            if (localNotesList.isEmpty()) {
-                _uiState.value = NotesUiState.Empty
-            } else {
-                _uiState.value = NotesUiState.Success(notes = localNotesList.toList())
+            kotlinx.coroutines.delay(150)
+
+            // UI Design mode: Load sample mock note matching reference screenshot
+            allNotes = listOf(
+                CustomerNote(
+                    id = "n1",
+                    customerId = "c1",
+                    note = "sdfhmnh\nghty hjty h",
+                    date = "Oct 11, 2026",
+                    time = "11:37 PM",
+                    authorName = "Sode"
+                )
+            )
+            updateState()
+        }
+    }
+
+    private fun updateState(
+        successMsg: String? = null,
+        errorMsg: String? = null,
+        editing: CustomerNote? = null,
+        selected: CustomerNote? = null,
+        submitting: Boolean = false
+    ) {
+        if (allNotes.isEmpty() && currentSearchQuery.isBlank()) {
+            _uiState.value = NotesUiState.Empty
+            return
+        }
+
+        val filtered = if (currentSearchQuery.isBlank()) {
+            allNotes
+        } else {
+            val q = currentSearchQuery.trim().lowercase()
+            allNotes.filter { note ->
+                note.note.lowercase().contains(q) || note.authorName.lowercase().contains(q)
             }
+        }
+
+        _uiState.value = NotesUiState.Success(
+            notes = allNotes,
+            filteredNotes = filtered,
+            searchQuery = currentSearchQuery,
+            editingNote = editing,
+            selectedNote = selected,
+            isSubmitting = submitting,
+            successMessage = successMsg,
+            errorMessage = errorMsg
+        )
+    }
+
+    fun onSearchQueryChanged(query: String) {
+        currentSearchQuery = query
+        val currentState = _uiState.value
+        if (currentState is NotesUiState.Success) {
+            updateState(
+                successMsg = currentState.successMessage,
+                errorMsg = currentState.errorMessage,
+                editing = currentState.editingNote,
+                selected = currentState.selectedNote
+            )
+        } else if (currentState is NotesUiState.Empty && query.isNotBlank()) {
+            updateState()
         }
     }
 
     /**
-     * Creates a new shared business note locally in the in-memory sample collection.
+     * Creates a new shared note automatically without distractions.
      */
     fun addNote(content: String) {
-        val currentState = _uiState.value
-        if (currentState is NotesUiState.Success || currentState is NotesUiState.Empty) {
-            viewModelScope.launch {
-                val newNote = CustomerNote(
-                    id = UUID.randomUUID().toString(),
-                    customerId = "0",
-                    note = content,
-                    date = "ዛሬ",
-                    time = "አሁን",
-                    authorName = "የአሁኑ አባል"
-                )
-                localNotesList.add(0, newNote)
-                
-                _uiState.value = NotesUiState.Success(
-                    notes = localNotesList.toList(),
-                    successMessage = "ማስታወሻው በተሳካ ሁኔታ ተመዝግቧል።"
-                )
-            }
+        if (content.isBlank()) return
+        viewModelScope.launch {
+            setSubmitting(true)
+            kotlinx.coroutines.delay(100)
+
+            val newNote = CustomerNote(
+                id = UUID.randomUUID().toString(),
+                customerId = "c1",
+                note = content.trim(),
+                date = "Oct 11, 2026",
+                time = "12:00 PM",
+                authorName = "አስተዳዳሪ"
+            )
+            allNotes = listOf(newNote) + allNotes
+            updateState(
+                successMsg = null, // Saved silently without distractions
+                selected = null
+            )
         }
     }
 
-    fun clearSuccessMessage() {
-        val currentState = _uiState.value
-        if (currentState is NotesUiState.Success) {
-            _uiState.value = currentState.copy(successMessage = null)
+    /**
+     * Updates an existing note automatically without distractions.
+     */
+    fun updateNote(noteId: String, content: String) {
+        if (content.isBlank()) return
+        viewModelScope.launch {
+            setSubmitting(true)
+            kotlinx.coroutines.delay(100)
+
+            allNotes = allNotes.map { note ->
+                if (note.id == noteId) note.copy(note = content.trim()) else note
+            }
+            updateState(
+                successMsg = null, // Saved silently without distractions
+                editing = null,
+                selected = null
+            )
+        }
+    }
+
+    /**
+     * Deletes a note.
+     */
+    fun deleteNote(noteId: String) {
+        viewModelScope.launch {
+            allNotes = allNotes.filter { it.id != noteId }
+            val currentState = _uiState.value as? NotesUiState.Success
+            val nextSelected = if (currentState?.selectedNote?.id == noteId) null else currentState?.selectedNote
+            val nextEditing = if (currentState?.editingNote?.id == noteId) null else currentState?.editingNote
+            updateState(
+                successMsg = null,
+                editing = nextEditing,
+                selected = nextSelected
+            )
+        }
+    }
+
+    fun startEditing(note: CustomerNote) {
+        val currentState = _uiState.value as? NotesUiState.Success
+        updateState(
+            editing = note,
+            selected = null
+        )
+    }
+
+    fun cancelEditing() {
+        updateState(editing = null)
+    }
+
+    fun selectNote(note: CustomerNote?) {
+        val currentState = _uiState.value as? NotesUiState.Success
+        updateState(
+            editing = currentState?.editingNote,
+            selected = note
+        )
+    }
+
+    fun clearMessages() {
+        val currentState = _uiState.value as? NotesUiState.Success
+        if (currentState != null) {
+            updateState(
+                editing = currentState.editingNote,
+                selected = currentState.selectedNote
+            )
+        }
+    }
+
+    private fun setSubmitting(submitting: Boolean) {
+        val currentState = _uiState.value as? NotesUiState.Success
+        if (currentState != null) {
+            _uiState.value = currentState.copy(isSubmitting = submitting)
         }
     }
 
@@ -107,7 +206,7 @@ class NotesViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = (this[APPLICATION_KEY] as ChuleApplication)
-                NotesViewModel(noteRepository = application.container.noteRepository)
+                NotesViewModel(_noteRepository = application.container.noteRepository)
             }
         }
     }

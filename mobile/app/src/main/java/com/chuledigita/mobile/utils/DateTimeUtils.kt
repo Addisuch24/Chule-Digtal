@@ -12,7 +12,7 @@ object DateTimeUtils {
     }
     
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    private val timeFormat = SimpleDateFormat("hh:mm A", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
     fun formatDate(isoString: String?): String {
         if (isoString.isNullOrBlank()) return ""

@@ -5,16 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -23,262 +18,199 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chuledigita.mobile.ui.theme.*
 
+/**
+ * Redesigned Login Screen matching the Chule Digital web branding.
+ * Uses the web palette: BrandGreen (#173B35), WarmOffWhite (#F8F5EE),
+ * CreamSurface (#FFFDF8), and BrandGold (#E9BD59).
+ */
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
-    onSignUpClick: () -> Unit = {}
+    onSignUpClick: () -> Unit = {},
+    viewModel: LoginViewModel = viewModel(factory = LoginViewModel.Factory)
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var isRememberMeChecked by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
 
-    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
 
-    // Colors matching the design
-    val brandNavy = Color(0xFF0F172A)
-    val brandBlue = Color(0xFF2563EB)
-    val brandBlueLight = Color(0xFF3B82F6)
-    val fieldBg = Color(0xFFF1F5F9)
-    val textGray = Color(0xFF64748B)
-
-    fun performLogin() {
-        if (username.isNotBlank() && password.isNotBlank()) {
-            isLoading = true
-            coroutineScope.launch {
-                delay(1500)
-                isLoading = false
-                onLoginSuccess()
-            }
+    LaunchedEffect(uiState) {
+        if (uiState is LoginUiState.Success) {
+            onLoginSuccess()
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(WarmOffWhite)
     ) {
-        // Background decorative shapes
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.4f)
-                .align(Alignment.TopStart)
-                .offset(y = (-100).dp, x = (-50).dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFE0F2FE).copy(alpha = 0.6f), Color.Transparent)
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.3f)
-                .align(Alignment.BottomEnd)
-                .offset(y = 50.dp, x = 50.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFDCFCE7).copy(alpha = 0.4f), Color.Transparent)
-                    )
-                )
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 24.dp, vertical = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
-            // Logo Placeholder
+            // Web-style Brand Logo: Compact gold "CD" mark
             Box(
                 modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(brandNavy),
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BrandGreen)
+                    .border(2.dp, BrandGold, RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(15.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .border(6.dp, brandBlueLight, CircleShape)
-                            .padding(8.dp)
-                    )
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.align(Alignment.Center).size(30.dp),
-                        tint = Color.White
-                    )
-                }
+                Text(
+                    text = "CD",
+                    color = BrandGold,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-1).sp
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // App Title
+            // Web-style wordmark
             Text(
-                text = buildAnnotatedString {
-                    withStyle(style = SpanStyle(color = brandNavy, fontWeight = FontWeight.Bold)) {
-                        append("Chule ")
-                    }
-                    withStyle(style = SpanStyle(color = brandBlue, fontWeight = FontWeight.Bold)) {
-                        append("Digital")
-                    }
-                },
-                fontSize = 36.sp
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Welcome back!",
-                style = MaterialTheme.typography.titleLarge,
+                text = "Chule Digital",
+                color = BrandGreen,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = brandNavy
-            )
-            Text(
-                text = "Sign in to continue",
-                style = MaterialTheme.typography.bodyMedium,
-                color = textGray
+                letterSpacing = 0.5.sp
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Login Card
+            // Web-style Welcome Copy
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Manage your business together.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = BrandGreen.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "ንግድዎን በአንድነት ያስተዳድሩ።",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BrandGreen.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // Login Form Card
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(32.dp),
-                color = Color.White,
-                shadowElevation = 10.dp
+                shape = RoundedCornerShape(24.dp),
+                color = CreamSurface,
+                border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.08f)),
+                shadowElevation = 2.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
+                    Text(
+                        text = "Sign In",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandGreen
+                    )
+
+                    // Error Feedback
+                    if (uiState is LoginUiState.Error) {
+                        Surface(
+                            color = ErrorColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, ErrorColor.copy(alpha = 0.2f))
+                        ) {
+                            Text(
+                                text = (uiState as LoginUiState.Error).message,
+                                color = ErrorColor,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp).fillMaxWidth()
+                            )
+                        }
+                    }
+
                     // Username Field
-                    LoginTextField(
+                    ChuleTextField(
                         value = username,
                         onValueChange = { username = it },
                         label = "Username",
-                        placeholder = "e.g. abebe.k",
-                        icon = Icons.Default.Person,
+                        placeholder = "Enter your username",
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                        brandColor = brandBlue,
-                        backgroundColor = fieldBg
+                        enabled = uiState !is LoginUiState.Loading
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
                     // Password Field
-                    LoginTextField(
+                    ChuleTextField(
                         value = password,
                         onValueChange = { password = it },
                         label = "Password",
                         placeholder = "Enter your password",
-                        icon = Icons.Default.Lock,
                         isPassword = true,
                         isPasswordVisible = isPasswordVisible,
                         onVisibilityToggle = { isPasswordVisible = !isPasswordVisible },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
                             focusManager.clearFocus()
-                            performLogin()
+                            viewModel.login(username, password)
                         }),
-                        brandColor = brandBlue,
-                        backgroundColor = fieldBg
+                        enabled = uiState !is LoginUiState.Loading
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Checkbox(
-                            checked = isRememberMeChecked,
-                            onCheckedChange = { isRememberMeChecked = it },
-                            colors = CheckboxDefaults.colors(checkedColor = brandBlue)
-                        )
-                        Text(
-                            text = "Keep me signed in",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = textGray
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Sign In Button
+                    // Sign In Action
                     Button(
-                        onClick = { performLogin() },
+                        onClick = { viewModel.login(username, password) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+                            .height(54.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BrandGreen,
+                            contentColor = Color.White
+                        ),
+                        enabled = uiState !is LoginUiState.Loading
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.horizontalGradient(
-                                        colors = listOf(brandBlue, brandBlueLight)
-                                    )
-                                )
-                                .padding(horizontal = 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Sign In",
-                                        modifier = Modifier.weight(1f),
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                }
-                            }
+                        if (uiState is LoginUiState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = "Sign In",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -286,84 +218,100 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // OR Divider
+            // Navigation to Signup
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), thickness = 1.dp, color = Color.LightGray.copy(alpha = 0.5f))
                 Text(
-                    text = "OR",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = textGray,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    text = "Don't have an account?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BrandGreen.copy(alpha = 0.6f)
                 )
-                HorizontalDivider(modifier = Modifier.weight(1f), thickness = 1.dp, color = Color.LightGray.copy(alpha = 0.5f))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Create New Account Button
-            OutlinedButton(
-                onClick = onSignUpClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, brandBlue),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = brandBlue)
-            ) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Icon(
-                        imageVector = Icons.Default.PersonAdd,
-                        contentDescription = null,
-                        modifier = Modifier.align(Alignment.CenterStart).size(20.dp)
-                    )
+                TextButton(onClick = onSignUpClick) {
                     Text(
-                        text = "Create New Account",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        modifier = Modifier.align(Alignment.CenterEnd).size(20.dp)
+                        text = "Create Account",
+                        color = BrandBlue,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "Sign up to get started",
-                style = MaterialTheme.typography.bodySmall,
-                color = textGray
-            )
-
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Footer
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                HorizontalDivider(modifier = Modifier.width(40.dp), thickness = 1.dp, color = Color.LightGray)
-                Text(
-                    text = " © 2024 Chule Digital ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = textGray
-                )
-                HorizontalDivider(modifier = Modifier.width(40.dp), thickness = 1.dp, color = Color.LightGray)
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
+            Text(
+                text = "© 2024 Chule Digital",
+                style = MaterialTheme.typography.labelSmall,
+                color = BrandGreen.copy(alpha = 0.4f)
+            )
         }
     }
 }
 
+/**
+ * Text field component following the Chule Digital web design.
+ */
+@Composable
+fun ChuleTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    isPassword: Boolean = false,
+    isPasswordVisible: Boolean = false,
+    onVisibilityToggle: () -> Unit = {},
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    enabled: Boolean = true
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = BrandGreen.copy(alpha = 0.7f),
+            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder, color = BrandGreen.copy(alpha = 0.3f)) },
+            visualTransformation = if (isPassword && !isPasswordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            singleLine = true,
+            enabled = enabled,
+            trailingIcon = {
+                if (isPassword) {
+                    IconButton(onClick = onVisibilityToggle) {
+                        Icon(
+                            imageVector = if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = null,
+                            tint = BrandGreen.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = BrandGreen,
+                unfocusedBorderColor = BrandGreen.copy(alpha = 0.15f),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                cursorColor = BrandGreen,
+                focusedLabelColor = BrandGreen
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * Legacy TextField component kept for compatibility with screens not yet redesigned (e.g. SignUp).
+ */
 @Composable
 fun LoginTextField(
     value: String,
@@ -432,5 +380,3 @@ fun LoginTextField(
         }
     }
 }
-
-val textGray = Color(0xFF64748B)

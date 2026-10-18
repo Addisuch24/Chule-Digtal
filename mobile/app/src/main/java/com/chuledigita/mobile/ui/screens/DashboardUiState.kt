@@ -1,23 +1,31 @@
 package com.chuledigita.mobile.ui.screens
 
-import com.chuledigita.mobile.domain.model.DashboardSummary
-import com.chuledigita.mobile.domain.model.Order
-import com.chuledigita.mobile.domain.model.FamilyMember
-import com.chuledigita.mobile.domain.model.RecentActivity
+data class DashboardRecentOrder(
+    val id: String,
+    val title: String,
+    val date: String
+)
+
+data class DashboardRecentNote(
+    val id: String,
+    val title: String,
+    val date: String
+)
 
 /**
- * UI state for the Dashboard, supporting loading, success, and empty states.
+ * UI state for the Dashboard matching the web overview.
  */
 sealed interface DashboardUiState {
     data object Loading : DashboardUiState
     
     data class Success(
-        val familyMember: FamilyMember,
-        val summary: DashboardSummary,
-        val recentActivities: List<RecentActivity>,
-        val pendingVerifications: List<Order>,
-        val quickSummaryMessage: String
+        val notesCount: Int,
+        val ordersCount: Int,
+        val customersCount: Int,
+        val currentBalance: Double,
+        val recentOrders: List<DashboardRecentOrder>,
+        val recentNotes: List<DashboardRecentNote>
     ) : DashboardUiState
 
-    data object Empty : DashboardUiState
+    data class Error(val message: String) : DashboardUiState
 }

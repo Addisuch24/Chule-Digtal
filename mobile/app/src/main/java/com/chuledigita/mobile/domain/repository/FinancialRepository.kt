@@ -28,6 +28,22 @@ interface FinancialRepository {
     ): Result<FinancialMovement>
 
     /**
+     * Updates an existing financial movement.
+     */
+    suspend fun updateMovement(
+        movementId: String,
+        customerId: String,
+        amount: Double,
+        type: MovementType,
+        description: String
+    ): Result<FinancialMovement>
+
+    /**
+     * Deletes a financial movement.
+     */
+    suspend fun deleteMovement(movementId: String): Result<Unit>
+
+    /**
      * Verifies a pending financial movement.
      */
     suspend fun verifyMovement(movementId: String, note: String): Result<FinancialMovement>

@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material3.*
@@ -16,23 +17,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.chuledigita.mobile.data.mock.MockDataProvider
 import com.chuledigita.mobile.domain.model.Customer
-import com.chuledigita.mobile.domain.model.FinancialMovement
 import com.chuledigita.mobile.domain.model.MovementType
-import com.chuledigita.mobile.domain.model.VerificationStatus
 import com.chuledigita.mobile.ui.components.MainScaffold
 import com.chuledigita.mobile.ui.components.PendingVerificationBanner
 import com.chuledigita.mobile.ui.theme.ErrorColor
 import com.chuledigita.mobile.ui.theme.SuccessColor
-import java.text.SimpleDateFormat
-import java.util.*
 
 @Composable
 fun RecordFinancialMovementScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: RecordFinancialMovementViewModel = viewModel(factory = RecordFinancialMovementViewModel.Factory)
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     var selectedCustomer by remember { mutableStateOf<Customer?>(null) }
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -43,7 +44,6 @@ fun RecordFinancialMovementScreen(
     var amountError by remember { mutableStateOf<String?>(null) }
     var descriptionError by remember { mutableStateOf<String?>(null) }
 
-    val customers = MockDataProvider.customers
     val scrollState = rememberScrollState()
 
     MainScaffold(
@@ -67,13 +67,51 @@ fun RecordFinancialMovementScreen(
                     modifier = Modifier.size(48.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Icons.Outlined.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text(text = "Transaction Form", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(text = "Adjust customer balance manually", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = "Transaction Form",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Adjust customer balance manually",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Error Banner
+            uiState.errorMessage?.let { error ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
 
@@ -108,7 +146,7 @@ fun RecordFinancialMovementScreen(
                 FilterChip(
                     selected = movementType == MovementType.CREDIT,
                     onClick = { movementType = MovementType.CREDIT },
-                    label = { Text("CREDIT (REDUCE)") },
+                    label = { Text("CREDIT (REDUCE / PAYMENT)") },
                     modifier = Modifier.weight(1f),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = SuccessColor.copy(alpha = 0.12f),
@@ -145,7 +183,7 @@ fun RecordFinancialMovementScreen(
                     onDismissRequest = { expanded = false },
                     modifier = Modifier.fillMaxWidth(0.85f)
                 ) {
-                    customers.forEach { customer ->
+                    uiState.customers.forEach { customer ->
                         DropdownMenuItem(
                             text = { Text(customer.name) },
                             onClick = {
@@ -165,10 +203,11 @@ fun RecordFinancialMovementScreen(
 
             OutlinedTextField(
                 value = amount,
-                onValueChange = { 
-                    if (it.isEmpty() || it.toDoubleOrNull() != null) {
-                        amount = it
+                onValueChange = { input ->
+                    if (input.isEmpty() || input.toDoubleOrNull() != null) {
+                        amount = input
                         amountError = null
+                        viewModel.clearError()
                     }
                 },
                 label = { Text("Amount (ETB) *") },
@@ -182,12 +221,13 @@ fun RecordFinancialMovementScreen(
 
             OutlinedTextField(
                 value = description,
-                onValueChange = { 
-                    description = it
+                onValueChange = { input ->
+                    description = input
                     descriptionError = null
+                    viewModel.clearError()
                 },
                 label = { Text("Description / Reason *") },
-                placeholder = { Text("e.g. Bulk cement correction, Service charge...") },
+                placeholder = { Text("e.g. Bulk cement correction, Payment receipt...") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 isError = descriptionError != null,
@@ -207,33 +247,42 @@ fun RecordFinancialMovementScreen(
                     if (selectedCustomer == null) customerError = "Please select a customer"
                     if (amt == null || amt <= 0) amountError = "Enter a valid positive amount"
                     if (description.isBlank()) descriptionError = "Description is required"
-                    
+
                     if (customerError == null && amountError == null && descriptionError == null) {
-                        val newMovement = FinancialMovement(
-                            id = "fmov-${System.currentTimeMillis()}",
-                            customerId = selectedCustomer!!.id,
-                            customerName = selectedCustomer!!.name,
-                            type = movementType,
+                        viewModel.submitTransaction(
+                            selectedCustomer = selectedCustomer,
+                            movementType = movementType,
                             amount = amt!!,
-                            date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
-                            description = description,
-                            recordedBy = MockDataProvider.currentFamilyMember.name,
-                            verificationStatus = VerificationStatus.PENDING
-                        )
-                        MockDataProvider.addFinancialMovement(newMovement)
-                        navController.popBackStack()
+                            description = description
+                        ) {
+                            navController.popBackStack()
+                        }
                     }
                 },
+                enabled = !uiState.isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Record Transaction", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (uiState.isSubmitting) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        "Record Transaction",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-            
+
             OutlinedButton(
                 onClick = { navController.popBackStack() },
+                enabled = !uiState.isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

@@ -6,10 +6,14 @@ import { connectSocket } from "../services/socket";
 function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState("login"); // 'login' | 'register'
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+
+  // Registration 5-field state
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -56,26 +60,49 @@ function Login() {
         setLoading(false);
       }
     } else {
-      if (!fullName.trim()) {
-        setError("Full name is required.");
+      // 5-field registration validation
+      const trimmedName = fullName.trim();
+      const trimmedPhone = phone.trim();
+      const trimmedEmail = email.trim();
+      const trimmedUsername = username.trim();
+
+      if (!trimmedName) {
+        setError("Name is required.");
         return;
       }
-      if (!username.trim()) {
+
+      if (!trimmedEmail) {
+        setError("Google account email is required.");
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        setError("Please enter a valid Google account email address.");
+        return;
+      }
+
+      if (!trimmedUsername) {
         setError("Username is required.");
         return;
       }
+
       if (!password || password.length < 4) {
         setError("Password must be at least 4 characters long.");
         return;
       }
+
       setLoading(true);
       try {
         const response = await api.post("/auth/register", {
-          fullName: fullName.trim(),
-          phone: phone.trim() || null,
-          username: username.trim(),
+          fullName: trimmedName,
+          phone: trimmedPhone || null,
+          email: trimmedEmail,
+          googleAccount: trimmedEmail,
+          username: trimmedUsername,
           password,
         });
+
         const registerData = response.data?.data;
         if (registerData?.token) {
           localStorage.setItem("token", registerData.token);
@@ -85,14 +112,14 @@ function Login() {
           connectSocket();
           navigate("/dashboard", { replace: true });
         } else {
-          setSuccessMessage("Family member registered successfully. You can now sign in.");
+          setSuccessMessage("Account registered successfully! Please sign in with your username and password.");
           switchMode("login");
         }
       } catch (requestError) {
         console.error("Registration error:", requestError);
         setError(
           requestError.response?.data?.message ||
-            "Registration failed. Please choose another username."
+            "Registration failed. Please choose another username or email."
         );
       } finally {
         setLoading(false);
@@ -121,7 +148,7 @@ function Login() {
               className="login-register-button"
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
             >
-              {mode === "login" ? "Register" : "Sign In"}
+              {mode === "login" ? "Register Account" : "Back to Sign In"}
             </button>
           </div>
 
@@ -137,66 +164,108 @@ function Login() {
           )}
 
           <form className="form-stack" onSubmit={handleSubmit}>
-            {mode === "register" && (
+            {mode === "register" ? (
               <>
+                {/* Field 1: Name */}
                 <label htmlFor="fullName">
-                  Full Name
+                  1. Name <span className="required">*</span>
                   <input
                     id="fullName"
                     type="text"
                     value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
+                    onChange={(e) => setFullName(e.target.value)}
                     placeholder="Enter your full name"
                     autoComplete="name"
                     required
                   />
                 </label>
 
+                {/* Field 2: Phone */}
                 <label htmlFor="phone">
-                  Phone Number <span className="muted">(optional)</span>
+                  2. Phone Number <span className="muted">(optional)</span>
                   <input
                     id="phone"
                     type="tel"
                     value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
+                    onChange={(e) => setPhone(e.target.value)}
                     placeholder="e.g. 0911..."
                     autoComplete="tel"
                   />
                 </label>
+
+                {/* Field 3: Google Account Email */}
+                <label htmlFor="email">
+                  3. Google Account Email <span className="required">*</span>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="example@gmail.com"
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+
+                {/* Field 4: Username */}
+                <label htmlFor="username">
+                  4. Username <span className="required">*</span>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Choose a unique username"
+                    autoComplete="username"
+                    required
+                  />
+                </label>
+
+                {/* Field 5: Password */}
+                <label htmlFor="password">
+                  5. Password <span className="required">*</span>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 4 characters"
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                {/* Login Field 1: Username */}
+                <label htmlFor="username">
+                  Username
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter your username"
+                    autoComplete="username"
+                    required
+                  />
+                </label>
+
+                {/* Login Field 2: Password */}
+                <label htmlFor="password">
+                  Password
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
               </>
             )}
-
-            <label htmlFor="username">
-              Username
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Enter your username"
-                autoComplete="username"
-                required
-              />
-            </label>
-
-            <label htmlFor="password">
-              Password
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={
-                  mode === "login"
-                    ? "Enter your password"
-                    : "At least 4 characters"
-                }
-                autoComplete={
-                  mode === "login" ? "current-password" : "new-password"
-                }
-                required
-              />
-            </label>
 
             <button type="submit" disabled={loading}>
               {loading
@@ -205,7 +274,7 @@ function Login() {
                   : "Registering..."
                 : mode === "login"
                 ? "Sign in"
-                : "Register account"}
+                : "Register Account"}
               <span aria-hidden="true"> -&gt;</span>
             </button>
           </form>

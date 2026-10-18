@@ -1,19 +1,40 @@
 package com.chuledigita.mobile.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.chuledigita.mobile.ChuleApplication
+import com.chuledigita.mobile.data.local.SessionPreferences
 import com.chuledigita.mobile.ui.screens.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppNavigation(
-    navController: NavHostController = rememberNavController(),
-    startDestination: String = Screen.Login.route
+    navController: NavHostController = rememberNavController()
 ) {
+    val context = LocalContext.current
+    val isLoggedIn = remember { SessionPreferences.isLoggedIn(context) }
+    val startDestination = if (isLoggedIn) Screen.Dashboard.route else Screen.Login.route
+
+    val logoutAction: () -> Unit = {
+        SessionPreferences.setLoggedIn(context, false)
+        val application = context.applicationContext as ChuleApplication
+        CoroutineScope(Dispatchers.IO).launch {
+            application.container.sessionRepository.clearSession()
+        }
+        navController.navigate(Screen.Login.route) {
+            popUpTo(0) { inclusive = true }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination
@@ -21,7 +42,8 @@ fun AppNavigation(
         composable(route = Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate(Screen.Customers.route) {
+                    SessionPreferences.setLoggedIn(context, true)
+                    navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
@@ -34,7 +56,8 @@ fun AppNavigation(
         composable(route = Screen.SignUp.route) {
             SignUpScreen(
                 onSignUpSuccess = {
-                    navController.navigate(Screen.Customers.route) {
+                    // Registration does not return a token; user logs in with new credentials
+                    navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.SignUp.route) { inclusive = true }
                     }
                 },
@@ -42,6 +65,22 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
             )
+        }
+
+        composable(route = Screen.Dashboard.route) {
+            DashboardScreen(navController = navController, onLogout = logoutAction)
+        }
+
+        composable(route = Screen.Notes.route) {
+            NotesScreen(navController = navController)
+        }
+
+        composable(route = Screen.Orders.route) {
+            OrdersScreen(navController = navController)
+        }
+
+        composable(route = Screen.Finance.route) {
+            FinanceScreen(navController = navController)
         }
 
         composable(route = Screen.Customers.route) {
@@ -68,20 +107,12 @@ fun AppNavigation(
             CustomerDetailsScreen(customerId = customerId, navController = navController)
         }
 
-        composable(route = Screen.Orders.route) {
-            OrdersScreen(navController = navController)
-        }
-
         composable(
             route = Screen.OrderDetails.route,
             arguments = listOf(navArgument("orderId") { type = NavType.StringType })
         ) { backStackEntry ->
             val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
             OrderDetailsScreen(orderId = orderId, navController = navController)
-        }
-
-        composable(route = Screen.Notes.route) {
-            NotesScreen(navController = navController)
         }
 
         composable(
@@ -92,21 +123,14 @@ fun AppNavigation(
             NoteDetailsScreen(noteId = noteId, navController = navController)
         }
 
-        // Keep existing routes for compatibility, but they are not in main nav
-        composable(route = Screen.Dashboard.route) {
-            DashboardScreen(navController = navController, onLogout = {})
-        }
-        composable(route = Screen.Finance.route) {
-            FinanceScreen(navController = navController, onLogout = {})
-        }
         composable(route = Screen.Notifications.route) {
-            NotificationsScreen(navController = navController, onLogout = {})
+            NotificationsScreen(navController = navController, onLogout = logoutAction)
         }
         composable(route = Screen.Profile.route) {
-            ProfileScreen(navController = navController, onLogout = {})
+            ProfileScreen(navController = navController, onLogout = logoutAction)
         }
         composable(route = Screen.Settings.route) {
-            SettingsScreen(navController = navController)
+            SettingsScreen(navController = navController, onLogout = logoutAction)
         }
         composable(route = Screen.FinancialMovements.route) {
             FinancialMovementsScreen(navController = navController)

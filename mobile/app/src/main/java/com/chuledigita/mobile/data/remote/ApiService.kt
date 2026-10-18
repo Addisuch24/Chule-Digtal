@@ -22,6 +22,9 @@ interface ApiService {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): Response<RegisterResponse>
 
+    @GET("auth/me")
+    suspend fun getProfile(): Response<ProfileResponse>
+
     // ============================================================
     // CUSTOMERS
     // ============================================================
@@ -39,6 +42,13 @@ interface ApiService {
     suspend fun getCustomerBalance(@Path("customerId") customerId: Long): Response<CustomerBalanceResponse>
 
     // ============================================================
+    // DASHBOARD
+    // ============================================================
+
+    @GET("dashboard")
+    suspend fun getDashboardSummary(): Response<DashboardApiResponse>
+
+    // ============================================================
     // ORDERS
     // ============================================================
 
@@ -48,16 +58,42 @@ interface ApiService {
         @Body request: CreateOrderRequest
     ): Response<OrderResponse>
 
+    @POST("orders")
+    suspend fun createOrderDirect(
+        @Body request: CreateOrderDirectRequest
+    ): Response<OrderResponse>
+
     @GET("orders")
     suspend fun getAllOrders(): Response<OrderListResponse>
 
     @GET("orders/{orderId}")
     suspend fun getOrderById(@Path("orderId") orderId: Long): Response<OrderResponse>
 
+    @PATCH("orders/{orderId}")
+    suspend fun updateOrder(
+        @Path("orderId") orderId: Long,
+        @Body request: UpdateOrderRequest
+    ): Response<OrderResponse>
+
+    @DELETE("orders/{orderId}")
+    suspend fun deleteOrder(@Path("orderId") orderId: Long): Response<Void>
+
     @PATCH("orders/{orderId}/status")
     suspend fun updateOrderStatus(
         @Path("orderId") orderId: Long,
         @Body request: UpdateOrderStatusRequest
+    ): Response<OrderResponse>
+
+    @PATCH("orders/{orderId}/verify")
+    suspend fun verifyOrder(
+        @Path("orderId") orderId: Long,
+        @Body request: VerificationRequest
+    ): Response<OrderResponse>
+
+    @PATCH("orders/{orderId}/reject")
+    suspend fun rejectOrder(
+        @Path("orderId") orderId: Long,
+        @Body request: VerificationRequest
     ): Response<OrderResponse>
 
     // ============================================================
@@ -83,6 +119,17 @@ interface ApiService {
     @GET("notes")
     suspend fun getAllGlobalNotes(): Response<BusinessNoteListResponse>
 
+    @PATCH("notes/{noteId}")
+    suspend fun updateGlobalNote(
+        @Path("noteId") noteId: Long,
+        @Body request: CreateNoteRequest
+    ): Response<BusinessNoteResponse>
+
+    @DELETE("notes/{noteId}")
+    suspend fun deleteGlobalNote(
+        @Path("noteId") noteId: Long
+    ): Response<Void>
+
     // ============================================================
     // FINANCIAL MOVEMENTS
     // ============================================================
@@ -95,6 +142,15 @@ interface ApiService {
 
     @GET("financial-movements/{movementId}")
     suspend fun getFinancialMovementById(@Path("movementId") movementId: Long): Response<FinancialMovementResponse>
+
+    @PATCH("financial-movements/{movementId}")
+    suspend fun updateFinancialMovement(
+        @Path("movementId") movementId: Long,
+        @Body request: CreateFinancialMovementRequest
+    ): Response<FinancialMovementResponse>
+
+    @DELETE("financial-movements/{movementId}")
+    suspend fun deleteFinancialMovement(@Path("movementId") movementId: Long): Response<Void>
 
     @PATCH("financial-movements/{movementId}/verify")
     suspend fun verifyFinancialMovement(

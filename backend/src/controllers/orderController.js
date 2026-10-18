@@ -535,4 +535,7 @@ module.exports = {
   deleteOrder,
   getOrderById,
   getAllOrders,
+  verifyOrder,
+  rejectOrder,
+  updateOrderStatus,
 };

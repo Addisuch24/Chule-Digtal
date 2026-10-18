@@ -12,6 +12,24 @@ data class CreateOrderRequest(
 )
 
 /**
+ * Request payload for creating an order with a title matching web behavior.
+ */
+data class CreateOrderDirectRequest(
+    val orderNumber: String,
+    val title: String,
+    val description: String,
+    val customerId: Long? = null
+)
+
+/**
+ * Request payload for updating order title and description.
+ */
+data class UpdateOrderRequest(
+    val title: String?,
+    val description: String?
+)
+
+/**
  * Request payload for updating order status.
  * Backend uses camelCase field for request body.
  */
@@ -24,20 +42,21 @@ data class UpdateOrderStatusRequest(
  */
 data class OrderDto(
     val id: Long,
-    @SerializedName("customer_id") val customerId: Long,
-    @SerializedName("customer_name") val customerName: String?,
+    val title: String? = null,
+    @SerializedName("customer_id") val customerId: Long? = null,
+    @SerializedName("customer_name") val customerName: String? = null,
     @SerializedName("order_number") val orderNumber: String,
-    val description: String?,
-    @SerializedName("order_status") val orderStatus: String,
-    @SerializedName("verification_status") val verificationStatus: String,
-    @SerializedName("taken_by") val takenBy: Long,
-    @SerializedName("taken_by_name") val takenByName: String?,
-    @SerializedName("verified_by") val verifiedBy: Long?,
-    @SerializedName("verified_by_name") val verifiedByName: String?,
-    @SerializedName("verified_at") val verifiedAt: String?,
-    @SerializedName("verification_note") val verificationNote: String?,
-    @SerializedName("created_at") val createdAt: String,
-    @SerializedName("updated_at") val updatedAt: String?
+    val description: String? = null,
+    @SerializedName("order_status") val orderStatus: String? = null,
+    @SerializedName("verification_status") val verificationStatus: String? = null,
+    @SerializedName("taken_by") val takenBy: Long? = null,
+    @SerializedName("taken_by_name") val takenByName: String? = null,
+    @SerializedName("verified_by") val verifiedBy: Long? = null,
+    @SerializedName("verified_by_name") val verifiedByName: String? = null,
+    @SerializedName("verified_at") val verifiedAt: String? = null,
+    @SerializedName("verification_note") val verificationNote: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null
 )
 
 /**

@@ -23,10 +23,11 @@ object RetrofitClient {
             // Add automatic JWT header injection interceptor using cached token
             .addInterceptor(AuthInterceptor(sessionRepository))
 
-        // Enable HTTP body logging in debug mode
+        // Enable HTTP header logging in debug mode with sensitive headers redacted
         if (BuildConfig.DEBUG) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = HttpLoggingInterceptor.Level.HEADERS
+                redactHeader("Authorization")
             }
             builder.addInterceptor(loggingInterceptor)
         }

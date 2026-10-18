@@ -60,6 +60,7 @@ fun StatusBadge(
 @Composable
 fun OrderStatusBadge(status: OrderStatus, modifier: Modifier = Modifier) {
     val color = when (status) {
+        OrderStatus.DRAFT -> MaterialTheme.colorScheme.outline
         OrderStatus.PENDING -> WarningColor
         OrderStatus.CONFIRMED -> MaterialTheme.colorScheme.primary
         OrderStatus.PROCESSING -> MaterialTheme.colorScheme.secondary

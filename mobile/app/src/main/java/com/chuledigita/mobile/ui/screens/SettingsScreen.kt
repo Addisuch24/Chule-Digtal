@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.chuledigita.mobile.ui.components.MainScaffold
+import com.chuledigita.mobile.ui.theme.ThemeManager
 
 @Composable
 fun SettingsScreen(
@@ -27,10 +27,8 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
 
     // Local states
-    var selectedTheme by remember { mutableStateOf("System Default") }
-    var orderNotificationsEnabled by remember { mutableStateOf(true) }
-    var financialNotificationsEnabled by remember { mutableStateOf(true) }
-    var customerNotificationsEnabled by remember { mutableStateOf(false) }
+    var selectedTheme by remember { mutableStateOf(ThemeManager.selectedTheme) }
+    var notificationsEnabled by remember { mutableStateOf(true) }
 
     MainScaffold(
         navController = navController,
@@ -59,7 +57,10 @@ fun SettingsScreen(
                             ThemeOptionRow(
                                 label = theme,
                                 isSelected = selectedTheme == theme,
-                                onClick = { selectedTheme = theme }
+                                onClick = {
+                                    selectedTheme = theme
+                                    ThemeManager.selectedTheme = theme
+                                }
                             )
                         }
                     }
@@ -76,67 +77,11 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(vertical = 8.dp)) {
                         NotificationToggleRow(
-                            title = "Order Updates",
-                            subtitle = "Get notified about new sales logs",
-                            checked = orderNotificationsEnabled,
-                            onCheckedChange = { orderNotificationsEnabled = it }
+                            title = "Enable Notifications",
+                            subtitle = "Receive alerts for customer registrations and balance updates",
+                            checked = notificationsEnabled,
+                            onCheckedChange = { notificationsEnabled = it }
                         )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                        NotificationToggleRow(
-                            title = "Verification Alerts",
-                            subtitle = "Alerts for items needing approval",
-                            checked = financialNotificationsEnabled,
-                            onCheckedChange = { financialNotificationsEnabled = it }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                        NotificationToggleRow(
-                            title = "Customer Alerts",
-                            subtitle = "News about new customer registrations",
-                            checked = customerNotificationsEnabled,
-                            onCheckedChange = { customerNotificationsEnabled = it }
-                        )
-                    }
-                }
-            }
-
-            // About Section
-            SettingsSection(title = "About App", icon = Icons.Outlined.Info) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(text = "Chule Digital", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                Text(text = "Ethiopian Family Business Management", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        
-                        Text(
-                            text = "A specialized digital tracking tool for managing sales, credit limits, and financial verifications without operational overhead.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(text = "Version", style = MaterialTheme.typography.bodyMedium)
-                            Text(text = "1.0.4-stable", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
                     }
                 }
             }
@@ -157,7 +102,7 @@ fun SettingsScreen(
             ) {
                 Icon(Icons.Outlined.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Log Out from Device", fontWeight = FontWeight.Bold)
+                Text("Logout", fontWeight = FontWeight.Bold)
             }
             
             Spacer(modifier = Modifier.height(40.dp))
