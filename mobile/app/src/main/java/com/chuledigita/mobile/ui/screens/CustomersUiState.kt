@@ -12,7 +12,11 @@ sealed interface CustomersUiState {
         val customers: List<Customer>,
         val searchQuery: String = "",
         val selectedFilter: CustomerFilter = CustomerFilter.ALL,
-        val selectedSort: CustomerSort = CustomerSort.NAME
+        val selectedSort: CustomerSort = CustomerSort.NAME,
+        val selectedIds: Set<String> = emptySet(),
+        val isDeleting: Boolean = false,
+        val actionMessage: String? = null,
+        val actionError: String? = null
     ) : CustomersUiState
 
     data object Empty : CustomersUiState

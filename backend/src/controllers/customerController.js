@@ -173,9 +173,212 @@ async function getCustomerBalance(req, res) {
   }
 }
 
+async function deleteCustomer(req, res) {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId || isNaN(customerId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid customer ID is required",
+      });
+    }
+
+    const customer = await customerModel.getCustomerById(Number(customerId));
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    const result = await customerModel.deleteCustomer(Number(customerId));
+
+    if (result.blocked) {
+      return res.status(400).json({
+        success: false,
+        message: result.reason,
+      });
+    }
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Failed to delete customer",
+      });
+    }
+
+    await activityService.recordActivity({
+      actorId: req.user.id,
+      activityType: "CUSTOMER_DELETED",
+      entityType: "CUSTOMER",
+      entityId: Number(customerId),
+      description: `Customer ${customer.full_name} was deleted`,
+      metadata: {
+        customerId: Number(customerId),
+        customerName: customer.full_name,
+      },
+    });
+
+    const socketService = require("../services/socketService");
+    socketService.emitToAll("customer:deleted", { customerId: Number(customerId) });
+    socketService.emitToAll("dashboard:refresh", {
+      activityType: "CUSTOMER_DELETED",
+      entityType: "CUSTOMER",
+      entityId: Number(customerId),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete customer error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete customer",
+    });
+  }
+}
+
+async function deleteCustomers(req, res) {
+  try {
+    const { customerIds } = req.body;
+
+    if (!Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "customerIds must be a non-empty array",
+      });
+    }
+
+    const validIds = customerIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid customer IDs provided",
+      });
+    }
+
+    const result = await customerModel.deleteCustomers(validIds);
+
+    if (result.deletedCount > 0) {
+      await activityService.recordActivity({
+        actorId: req.user.id,
+        activityType: "CUSTOMER_BULK_DELETED",
+        entityType: "CUSTOMER",
+        entityId: result.deletedIds[0],
+        description: `Bulk deleted ${result.deletedCount} customer(s)`,
+        metadata: {
+          deletedCount: result.deletedCount,
+          deletedIds: result.deletedIds,
+          skipped: result.skipped,
+        },
+      });
+
+      const socketService = require("../services/socketService");
+      socketService.emitToAll("customer:deleted", { customerIds: result.deletedIds });
+      socketService.emitToAll("dashboard:refresh", {
+        activityType: "CUSTOMER_BULK_DELETED",
+        entityType: "CUSTOMER",
+        deletedIds: result.deletedIds,
+      });
+    }
+
+    if (result.deletedCount === 0) {
+      const reason =
+        result.skipped && result.skipped.length > 0
+          ? result.skipped.length === 1
+            ? result.skipped[0].reason
+            : `${result.skipped.length} customer(s) could not be deleted because they have associated financial transactions in the ledger.`
+          : "No customers were deleted.";
+
+      return res.status(400).json({
+        success: false,
+        message: reason,
+        data: result,
+      });
+    }
+
+    const message =
+      result.skipped && result.skipped.length > 0
+        ? `Successfully deleted ${result.deletedCount} customer(s). ${result.skipped.length} customer(s) were preserved due to associated financial transactions.`
+        : `Successfully deleted ${result.deletedCount} customer(s)`;
+
+    return res.status(200).json({
+      success: true,
+      message,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete customers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete customers",
+    });
+  }
+}
+
+async function updateCustomer(req, res) {
+  try {
+    const { customerId } = req.params;
+    const { full_name, phone } = req.body;
+
+    if (!Number.isInteger(Number(customerId)) || Number(customerId) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer ID",
+      });
+    }
+
+    const existing = await customerModel.getCustomerById(Number(customerId));
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    const updated = await customerModel.updateCustomer({
+      customerId: Number(customerId),
+      fullName: full_name,
+      phone,
+    });
+
+    await activityService.recordActivity({
+      actorId: Number(req.user.id),
+      activityType: "CUSTOMER_UPDATED",
+      entityType: "CUSTOMER",
+      entityId: Number(customerId),
+      description: `Customer ${updated.full_name} details were updated`,
+      metadata: {
+        customerId: Number(customerId),
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer updated successfully",
+      data: updated,
+    });
+  } catch (error) {
+    console.error("Update customer error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update customer",
+    });
+  }
+}
+
 module.exports = {
   createCustomer,
+  updateCustomer,
   getCustomerById,
   getAllCustomers,
   getCustomerBalance,
-};
+  deleteCustomer,
+  deleteCustomers,
+};

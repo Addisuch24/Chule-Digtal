@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chuledigita.mobile.ui.components.AuthBackgroundWaves
 import com.chuledigita.mobile.ui.components.ChuleTextField
 import com.chuledigita.mobile.ui.theme.*
 
@@ -62,21 +63,26 @@ fun SignUpScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Create Account", fontWeight = FontWeight.Bold, color = BrandGreen) },
-                navigationIcon = {
-                    IconButton(onClick = onBackToLogin) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = BrandGreen
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = WarmOffWhite)
-            )
+            Surface(
+                color = PureWhiteSurface,
+                border = BorderStroke(1.dp, BorderDivider.copy(alpha = 0.5f))
+            ) {
+                TopAppBar(
+                    title = { Text("Create Account", fontWeight = FontWeight.Bold, color = BrandNavy) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackToLogin) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = BrandNavy
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = PureWhiteSurface)
+                )
+            }
         },
-        containerColor = WarmOffWhite
+        containerColor = OffWhiteBg
     ) { padding ->
         Column(
             modifier = Modifier
@@ -90,12 +96,13 @@ fun SignUpScreen(
                 text = "Join Chule Digital",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = BrandGreen
+                color = BrandNavy
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "ንግድዎን በአንድነት ያስተዳድሩ - 5-Field Registration",
                 style = MaterialTheme.typography.bodyMedium,
-                color = BrandGreen.copy(alpha = 0.6f),
+                color = TextSecondary,
                 textAlign = TextAlign.Center
             )
 
@@ -209,9 +216,9 @@ fun SignUpScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = BrandGreen,
+                    containerColor = EmeraldGreen,
                     contentColor = Color.White
                 ),
                 enabled = !isLoading
@@ -227,14 +234,25 @@ fun SignUpScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            TextButton(onClick = onBackToLogin) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    text = "Already have an account? Sign In",
-                    color = BrandBlue,
-                    fontWeight = FontWeight.Bold
+                    text = "Already have an account?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
                 )
+                Spacer(modifier = Modifier.width(4.dp))
+                TextButton(onClick = onBackToLogin) {
+                    Text(
+                        text = "Sign In",
+                        color = EmeraldGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

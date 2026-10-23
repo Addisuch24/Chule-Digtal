@@ -69,9 +69,28 @@ async function deleteBusinessNote({ noteId, deletedBy }) {
   return true;
 }
 
+async function deleteBusinessNotes({ noteIds, deletedBy }) {
+  const result = await businessNoteModel.deleteBusinessNotes(noteIds);
+  if (result.deletedCount > 0) {
+    await activityService.recordActivity({
+      actorId: deletedBy,
+      activityType: "BUSINESS_NOTE_BULK_DELETED",
+      entityType: "BUSINESS_NOTE",
+      entityId: noteIds[0],
+      description: `${result.deletedCount} business notes were deleted`,
+      metadata: {
+        deletedCount: result.deletedCount,
+        noteIds,
+      },
+    });
+  }
+  return result;
+}
+
 module.exports = {
   createBusinessNote,
   getAllBusinessNotes,
   updateBusinessNote,
   deleteBusinessNote,
+  deleteBusinessNotes,
 };

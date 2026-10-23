@@ -21,6 +21,9 @@ enum class PaymentMethod {
  */
 enum class NotificationType {
     CUSTOMER_CREATED,
+    CUSTOMER_UPDATED,
+    CUSTOMER_DELETED,
+    CUSTOMER_BULK_DELETED,
     CUSTOMER_NOTE_CREATED,
     BUSINESS_NOTE_CREATED,
     ORDER_CREATED,
@@ -30,6 +33,8 @@ enum class NotificationType {
     FINANCIAL_MOVEMENT_CREATED,
     FINANCIAL_MOVEMENT_VERIFIED,
     FINANCIAL_MOVEMENT_REJECTED,
+    FINANCIAL_MOVEMENT_DELETED,
+    FINANCIAL_MOVEMENT_BULK_DELETED,
     PAYMENT_RECORDED,
     SYSTEM
 }
@@ -162,7 +167,9 @@ data class NotificationItem(
     val isRead: Boolean,
     val type: NotificationType,
     val actor: String? = null,
-    val activityId: String? = null
+    val activityId: String? = null,
+    val entityType: String? = null,
+    val entityId: String? = null
 )
 
 data class FinanceSummary(

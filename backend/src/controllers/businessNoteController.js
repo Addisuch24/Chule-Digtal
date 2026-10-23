@@ -154,9 +154,59 @@ async function deleteBusinessNote(req, res) {
   }
 }
 
+async function deleteBusinessNotes(req, res) {
+  try {
+    const rawIds = req.body.noteIds || req.body.ids;
+    const deletedBy = Number(req.user.id);
+
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of note IDs ('noteIds' or 'ids') is required",
+      });
+    }
+
+    if (rawIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete more than 100 notes at a time",
+      });
+    }
+
+    const validIds = rawIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid note IDs provided",
+      });
+    }
+
+    const result = await businessNoteService.deleteBusinessNotes({
+      noteIds: validIds,
+      deletedBy,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} notes deleted successfully`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete business notes error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete business notes",
+    });
+  }
+}
+
 module.exports = {
   createBusinessNote,
   getAllBusinessNotes,
   updateBusinessNote,
   deleteBusinessNote,
+  deleteBusinessNotes,
 };

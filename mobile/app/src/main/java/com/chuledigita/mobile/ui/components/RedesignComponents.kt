@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chuledigita.mobile.domain.model.*
+import com.chuledigita.mobile.ui.theme.*
 
 @Composable
 fun CustomerCard(
@@ -25,47 +26,177 @@ fun CustomerCard(
     onEditClick: () -> Unit,
     onPayCredit: () -> Unit,
     onCollectBalance: () -> Unit,
-    isEditable: Boolean
+    isEditable: Boolean,
+    isSelected: Boolean = false,
+    isSelectionActive: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    onDeleteClick: (() -> Unit)? = null
 ) {
+    val initials = remember(customer.name) {
+        customer.name.trim().split(" ")
+            .mapNotNull { it.firstOrNull()?.toString() }
+            .take(2)
+            .joinToString("")
+            .uppercase()
+            .ifEmpty { "C" }
+    }
+
+    val hasDebt = customer.creditAmount > 0.0 && customer.creditStatus != CreditStatus.PAID_CREDIT
+    val hasBalance = customer.remainingBalanceAmount > 0.0 && customer.remainingBalanceStatus != RemainingBalanceStatus.BALANCE_COLLECTED
+    val isActive = hasDebt || hasBalance || customer.registrationDate.isNotBlank()
+
     Card(
-        onClick = onClick,
+        onClick = {
+            if (isSelectionActive && onToggleSelect != null) {
+                onToggleSelect()
+            } else {
+                onClick()
+            }
+        },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) LightMint.copy(alpha = 0.4f) else PureWhiteSurface
+        ),
+        border = BorderStroke(
+            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) EmeraldGreen else BorderDivider
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 1.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = customer.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    customer.phone?.let {
-                        Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (onToggleSelect != null) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = EmeraldGreen,
+                            uncheckedColor = TextSecondary.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+
+                // Customer Avatar Circle
+                Surface(
+                    shape = CircleShape,
+                    color = LightMint,
+                    border = BorderStroke(1.dp, EmeraldGreen.copy(alpha = 0.25f)),
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = initials,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = EmeraldGreen
+                        )
                     }
                 }
-                if (isEditable) {
-                    IconButton(onClick = onEditClick) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
-                    }
-                } else {
-                    Icon(
-                        Icons.Default.Lock, 
-                        contentDescription = "Read-only", 
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.outline
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Customer Details
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = customer.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
                     )
+                    customer.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = phone,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val balanceString = when {
+                        hasDebt -> "Debit: ${customer.creditAmount.toInt()} ETB"
+                        hasBalance -> "Balance: ${customer.remainingBalanceAmount.toInt()} ETB"
+                        else -> "Balance: 0 ETB"
+                    }
+                    val balanceColor = when {
+                        hasDebt -> ErrorColor
+                        hasBalance -> EmeraldGreen
+                        else -> TextSecondary
+                    }
+                    Text(
+                        text = balanceString,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = balanceColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Status Badge & Action
+                Column(horizontalAlignment = Alignment.End) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isActive) LightMint else Color(0xFFF1F5F9),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isActive) EmeraldGreen.copy(alpha = 0.3f) else Color(0xFFE2E8F0)
+                        )
+                    ) {
+                        Text(
+                            text = if (isActive) "Active" else "Inactive",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isActive) EmeraldGreen else TextSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (isEditable) {
+                            IconButton(
+                                onClick = onEditClick,
+                                modifier = Modifier.size(32.dp).padding(top = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit",
+                                    tint = EmeraldGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        if (onDeleteClick != null) {
+                            IconButton(
+                                onClick = onDeleteClick,
+                                modifier = Modifier.size(32.dp).padding(top = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = "Delete",
+                                    tint = ErrorColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             if (customer.creditStatus != null || customer.remainingBalanceStatus != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = BorderDivider)
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     customer.creditStatus?.let { status ->
                         CreditStatusSection(
                             amount = customer.creditAmount,
@@ -84,11 +215,11 @@ fun CustomerCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "የተመዘገበው በ: ${customer.createdBy}",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                color = TextSecondary.copy(alpha = 0.7f)
             )
         }
     }

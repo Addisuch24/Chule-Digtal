@@ -20,6 +20,10 @@ router.patch("/:orderId/status", orderController.updateOrderStatus);
 router.patch("/:orderId/verify", orderController.verifyOrder);
 router.patch("/:orderId/reject", orderController.rejectOrder);
 
+// Bulk delete orders
+router.post("/bulk-delete", orderController.deleteOrders);
+router.delete("/bulk", orderController.deleteOrders);
+
 router.delete("/:orderId", orderController.deleteOrder);
 
 module.exports = router;

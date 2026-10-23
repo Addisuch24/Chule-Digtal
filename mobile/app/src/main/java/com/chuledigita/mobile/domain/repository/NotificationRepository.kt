@@ -24,6 +24,11 @@ interface NotificationRepository {
     val realtimeEventFlow: SharedFlow<NotificationItem>
 
     /**
+     * In-app pop-up notification manager.
+     */
+    val inAppNotificationManager: com.chuledigita.mobile.notifications.InAppNotificationManager
+
+    /**
      * Fetches fresh notifications from the backend.
      */
     suspend fun refreshNotifications(): Result<Unit>
@@ -32,6 +37,16 @@ interface NotificationRepository {
      * Marks a specific notification as read on the backend.
      */
     suspend fun markAsRead(notificationId: String): Result<Unit>
+
+    /**
+     * Marks all notifications as read for the current user.
+     */
+    suspend fun markAllAsRead(): Result<Unit>
+
+    /**
+     * Deletes multiple notifications for the current authenticated recipient.
+     */
+    suspend fun bulkDeleteNotifications(notificationIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
 
     /**
      * Starts the real-time notification listener.

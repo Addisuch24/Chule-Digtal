@@ -24,6 +24,11 @@ interface CustomerRepository {
     suspend fun createCustomer(name: String, phone: String?): Result<Customer>
 
     /**
+     * Updates an existing customer profile without changing ID or creating duplicate rows.
+     */
+    suspend fun updateCustomer(customerId: String, name: String, phone: String?): Result<Customer>
+
+    /**
      * Records a secure credit payment for an outstanding balance amount.
      */
     suspend fun recordPayment(
@@ -42,4 +47,14 @@ interface CustomerRepository {
      * Appends a real tracking text note entry into a customer's history logs.
      */
     suspend fun createCustomerNote(customerId: String, text: String): Result<CustomerNote>
+
+    /**
+     * Deletes a single customer by identifier. Fails if linked financial movements exist.
+     */
+    suspend fun deleteCustomer(customerId: String): Result<Unit>
+
+    /**
+     * Deletes multiple customers, skipping customers with linked financial movements to preserve accounting audit integrity.
+     */
+    suspend fun bulkDeleteCustomers(customerIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
 }

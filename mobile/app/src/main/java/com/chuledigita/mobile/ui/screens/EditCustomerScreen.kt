@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chuledigita.mobile.data.mock.MockDataProvider
 import com.chuledigita.mobile.ui.components.ConfirmDialog
@@ -25,7 +26,9 @@ fun EditCustomerScreen(
     navController: NavHostController,
     viewModel: CustomersViewModel = viewModel(factory = CustomersViewModel.Factory)
 ) {
-    val customer = remember(customerId) { MockDataProvider.getCustomerById(customerId) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val customerFromState = (uiState as? CustomersUiState.Success)?.customers?.find { it.id == customerId }
+    val customer = customerFromState ?: remember(customerId) { MockDataProvider.getCustomerById(customerId) }
     
     if (customer == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -34,11 +37,11 @@ fun EditCustomerScreen(
         return
     }
 
-    val isEditable = customer.createdBy == MockDataProvider.currentFamilyMember.name
+    val isEditable = true
     
-    var name by remember { mutableStateOf(customer.name) }
-    var phone by remember { mutableStateOf(customer.phone ?: "") }
-    var note by remember { mutableStateOf(customer.detailNote ?: "") }
+    var name by remember(customer) { mutableStateOf(customer.name) }
+    var phone by remember(customer) { mutableStateOf(customer.phone ?: "") }
+    var note by remember(customer) { mutableStateOf(customer.detailNote ?: "") }
     
     var nameError by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -114,26 +117,31 @@ fun EditCustomerScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             if (isEditable) {
+                var isUpdating by remember { mutableStateOf(false) }
                 Button(
                     onClick = {
                         if (name.isBlank()) {
                             nameError = true
                         } else {
-                            MockDataProvider.updateCustomer(
-                                customer.copy(
-                                    name = name,
-                                    phone = phone.ifBlank { null },
-                                    detailNote = note.ifBlank { null }
-                                )
-                            )
-                            viewModel.refresh()
-                            navController.popBackStack()
+                            isUpdating = true
+                            viewModel.updateCustomer(
+                                customerId = customer.id,
+                                name = name.trim(),
+                                phone = phone.trim().ifBlank { null },
+                                note = note.trim().ifBlank { null }
+                            ) { success, _ ->
+                                isUpdating = false
+                                if (success) {
+                                    navController.popBackStack()
+                                }
+                            }
                         }
                     },
+                    enabled = !isUpdating,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("Update Customer")
+                    Text(if (isUpdating) "Updating..." else "Update Customer")
                 }
             }
             

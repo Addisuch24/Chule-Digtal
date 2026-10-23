@@ -89,7 +89,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         NotificationRepositoryImpl(
             apiService = apiService,
             socketManager = socketManager,
-            sessionRepository = sessionRepository
+            sessionRepository = sessionRepository,
+            context = context
         ).apply {
             startRealTimeSync()
         }

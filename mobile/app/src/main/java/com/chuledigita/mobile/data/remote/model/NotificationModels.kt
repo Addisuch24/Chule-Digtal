@@ -15,7 +15,9 @@ data class NotificationDto(
     val message: String,
     @SerializedName("is_read") val isRead: Int, // Backend returns 0/1 for booleans
     @SerializedName("read_at") val readAt: String?,
-    @SerializedName("created_at") val createdAt: String
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("entity_type") val entityType: String? = null,
+    @SerializedName("entity_id") val entityId: String? = null
 )
 
 /**

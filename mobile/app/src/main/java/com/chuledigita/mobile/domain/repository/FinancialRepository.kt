@@ -44,6 +44,11 @@ interface FinancialRepository {
     suspend fun deleteMovement(movementId: String): Result<Unit>
 
     /**
+     * Deletes multiple financial movements, preserving verified records to maintain accounting audit integrity.
+     */
+    suspend fun bulkDeleteMovements(movementIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
+
+    /**
      * Verifies a pending financial movement.
      */
     suspend fun verifyMovement(movementId: String, note: String): Result<FinancialMovement>

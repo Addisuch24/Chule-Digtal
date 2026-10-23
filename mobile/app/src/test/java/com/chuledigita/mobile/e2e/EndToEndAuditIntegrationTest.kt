@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.*
@@ -91,6 +93,7 @@ class EndToEndAuditIntegrationTest {
 
     @Before
     fun setUp() = runBlocking {
+        Dispatchers.setMain(Dispatchers.Unconfined)
         com.chuledigita.mobile.data.remote.ApiConfig.BASE_URL = apiBaseUrl
         // --- Initialize Session A ---
         sessionRepoA = TestSessionRepository()
@@ -165,6 +168,7 @@ class EndToEndAuditIntegrationTest {
         disposableOrders.clear()
 
         socketManagerB.disconnect()
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -236,7 +240,8 @@ class EndToEndAuditIntegrationTest {
     @Test
     fun testWorkflowD_FinancialMovements_debitCreditBalanceAccounting() = runBlocking {
         // Customer for financial tests
-        val custRes = customerRepoA.createCustomer("Financial Audit Cust ${UUID.randomUUID().toString().take(6)}", "0988776655")
+        val randomSuffix = UUID.randomUUID().toString().filter { it.isDigit() }.take(6).padEnd(6, '1')
+        val custRes = customerRepoA.createCustomer("Financial Audit Cust $randomSuffix", "09$randomSuffix")
         assertTrue(custRes.isSuccess)
         val customer = custRes.getOrNull()!!
         disposableCustomers.add(customer.id)
@@ -278,10 +283,8 @@ class EndToEndAuditIntegrationTest {
         )
 
         val financeVmB = FinanceViewModel(
-            _financialRepository = financialRepoB,
-            _customerRepository = customerRepoB,
-            _notificationRepository = notificationRepoB,
-            externalScope = testScope
+            financialRepository = financialRepoB,
+            customerRepository = customerRepoB
         )
 
         delay(400)

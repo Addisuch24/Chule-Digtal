@@ -124,6 +124,45 @@ class CustomerRepositoryImpl(
         }
     }
 
+    override suspend fun updateCustomer(customerId: String, name: String, phone: String?): Result<Customer> {
+        return try {
+            val idLong = customerId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("Invalid customer ID"))
+            val response = apiService.updateCustomer(
+                idLong,
+                CreateCustomerRequest(
+                    fullName = name.trim(),
+                    phone = phone?.trim()?.takeIf { it.isNotEmpty() }
+                )
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                val dto = response.body()?.data
+                if (dto != null) {
+                    val customer = Customer(
+                        id = dto.id.toString(),
+                        name = dto.fullName,
+                        phone = dto.phone,
+                        createdBy = dto.createdByName ?: dto.createdBy.toString(),
+                        createdDate = dto.createdAt,
+                        updatedDate = dto.updatedAt ?: dto.createdAt,
+                        registrationDate = dto.createdAt,
+                        creditAmount = dto.totalDebit ?: 0.0,
+                        creditStatus = CreditStatus.PAID_CREDIT,
+                        remainingBalanceAmount = dto.balance ?: 0.0,
+                        remainingBalanceStatus = RemainingBalanceStatus.BALANCE_COLLECTED
+                    )
+                    Result.success(customer)
+                } else {
+                    Result.failure(Exception("Empty payload on customer update"))
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to update customer")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.message ?: "Network error while updating customer."))
+        }
+    }
+
     override suspend fun recordPayment(
         customerId: String,
         amount: Double,
@@ -201,6 +240,47 @@ class CustomerRepositoryImpl(
             }
         } catch (e: Exception) {
             Result.failure(Exception("Network error while submitting tracking entry note to backend."))
+        }
+    }
+
+    override suspend fun deleteCustomer(customerId: String): Result<Unit> {
+        return try {
+            val idLong = customerId.toLongOrNull() ?: return Result.failure(Exception("Invalid customer ID format"))
+            val response = apiService.deleteCustomer(idLong)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete customer")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting customer: ${e.message}"))
+        }
+    }
+
+    override suspend fun bulkDeleteCustomers(customerIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData> {
+        return try {
+            val validLongs = customerIds.mapNotNull { it.toLongOrNull() }
+            if (validLongs.isEmpty()) {
+                return Result.failure(Exception("No valid customer IDs provided"))
+            }
+            val request = com.chuledigita.mobile.data.remote.model.BulkDeleteCustomersRequest(customerIds = validLongs)
+            val response = apiService.bulkDeleteCustomers(request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val data = response.body()?.data ?: com.chuledigita.mobile.data.remote.model.BulkDeleteData(deletedCount = 0)
+                if (data.deletedCount == 0) {
+                    val reason = data.skipped?.firstOrNull()?.reason
+                        ?: "Selected customer(s) could not be deleted due to associated financial transactions."
+                    Result.failure(Exception(reason))
+                } else {
+                    Result.success(data)
+                }
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete selected customers")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting customers: ${e.message}"))
         }
     }
 

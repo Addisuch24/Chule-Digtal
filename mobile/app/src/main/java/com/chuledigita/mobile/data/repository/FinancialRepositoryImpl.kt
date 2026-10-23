@@ -123,6 +123,27 @@ class FinancialRepositoryImpl(
         }
     }
 
+    override suspend fun bulkDeleteMovements(movementIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData> {
+        return try {
+            val validLongs = movementIds.mapNotNull { it.toLongOrNull() }
+            if (validLongs.isEmpty()) {
+                return Result.failure(Exception("No valid financial movement IDs provided"))
+            }
+            val request = com.chuledigita.mobile.data.remote.model.BulkDeleteMovementsRequest(movementIds = validLongs)
+            val response = apiService.bulkDeleteFinancialMovements(request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val data = response.body()?.data ?: com.chuledigita.mobile.data.remote.model.BulkDeleteData(deletedCount = 0)
+                Result.success(data)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete financial movements")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting financial movements: ${e.message}"))
+        }
+    }
+
+
     override suspend fun verifyMovement(movementId: String, note: String): Result<FinancialMovement> {
         return try {
             val idLong = movementId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))

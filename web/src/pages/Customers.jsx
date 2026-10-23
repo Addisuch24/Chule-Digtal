@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../services/api";
 import FeedbackState from "../components/FeedbackState";
 import PageHeader from "../components/PageHeader";
@@ -22,6 +22,7 @@ function Customers() {
   const [selectedNoteId, setSelectedNoteId] = useState(null);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [openMenuNoteId, setOpenMenuNoteId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -160,25 +161,67 @@ function Customers() {
     }
   }
 
-  const filteredNotes = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return notes;
-    return notes.filter((note) =>
-      `${note.note_text || ""} ${note.created_by_name || ""}`
-        .toLowerCase()
-        .includes(query)
+  function handleToggleSelect(id, event) {
+    event.stopPropagation();
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  }, [notes, search]);
+  }
+
+  function handleSelectAll() {
+    if (selectedIds.length === filteredNotes.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredNotes.map((n) => n.id));
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedIds.length} selected note(s)? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await api.post("/notes/bulk-delete", { noteIds: selectedIds });
+      setMessage(`Successfully deleted ${selectedIds.length} note(s).`);
+      setSelectedIds([]);
+      if (selectedIds.includes(selectedNoteId)) setSelectedNoteId(null);
+      await loadNotes();
+    } catch (requestError) {
+      console.error("Bulk delete notes error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to delete notes."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const query = search.trim().toLowerCase();
+  const filteredNotes = query
+    ? notes.filter((note) =>
+        `${note.note_text || ""} ${note.created_by_name || ""}`
+          .toLowerCase()
+          .includes(query)
+      )
+    : notes;
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId);
 
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="የግል ማስታወሻ"
-        title="ማስታወሻዎች"
-        description="ሀሳቦችንና አስፈላጊ መረጃዎችን እዚህ ይመዝግቡ።"
+        eyebrow="Personal Notes"
+        title="Notes"
+        description="Keep important information, ideas, and reminders."
         action={<span className="count-label">{notes.length} notes</span>}
+        theme="notes"
       />
 
       <section className="panel">
@@ -225,9 +268,21 @@ function Customers() {
 
       <section className="panel" ref={noteList}>
         <div className="section-heading">
-          <div>
-            <p className="eyebrow">Your notes</p>
-            <h2>All notes</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {filteredNotes.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedIds.length > 0 && selectedIds.length === filteredNotes.length}
+                onChange={handleSelectAll}
+                aria-label="Select all notes"
+                title="Select all notes"
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+            )}
+            <div>
+              <p className="eyebrow">Your notes</p>
+              <h2>All notes</h2>
+            </div>
           </div>
           <input
             className="search-input"
@@ -237,6 +292,53 @@ function Customers() {
             aria-label="Search notes"
           />
         </div>
+
+        {selectedIds.length > 0 && (
+          <div
+            className="bulk-action-bar"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "0.6rem 1rem",
+              marginBottom: "1rem",
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "8px",
+            }}
+          >
+            <span>
+              <strong>{selectedIds.length}</strong> note(s) selected
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="button button-danger"
+                style={{
+                  backgroundColor: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.4rem 0.8rem",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                onClick={handleBulkDelete}
+                disabled={submitting}
+              >
+                {submitting ? "Deleting..." : `Delete Selected (${selectedIds.length})`}
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                style={{ padding: "0.4rem 0.8rem", borderRadius: "6px" }}
+                onClick={() => setSelectedIds([])}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <FeedbackState type="loading" title="Loading notes..." />
@@ -262,11 +364,30 @@ function Customers() {
               const [heading, ...remainingLines] = String(note.note_text || "")
                 .split(/\r?\n/);
               const preview = remainingLines.join(" ").trim() || heading;
+              const isSelected = selectedIds.includes(note.id);
               return (
-                <article className="business-note-card" key={note.id}>
+                <article
+                  className={`business-note-card ${isSelected ? "note-card-selected" : ""}`}
+                  key={note.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "stretch",
+                    border: isSelected ? "1px solid rgba(239, 68, 68, 0.5)" : undefined,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", paddingLeft: "0.75rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleToggleSelect(note.id, e)}
+                      aria-label={`Select note ${noteHeading(note.note_text)}`}
+                      style={{ cursor: "pointer", width: "18px", height: "18px" }}
+                    />
+                  </div>
                   <button
                     className="business-note-open"
                     type="button"
+                    style={{ flex: 1 }}
                     onClick={() => {
                       setSelectedNoteId(note.id);
                       setEditingNoteId(null);

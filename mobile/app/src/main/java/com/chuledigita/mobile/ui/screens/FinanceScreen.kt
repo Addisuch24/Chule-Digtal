@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,7 +32,9 @@ import androidx.navigation.NavHostController
 import com.chuledigita.mobile.domain.model.FinancialMovement
 import com.chuledigita.mobile.domain.model.MovementType
 import com.chuledigita.mobile.ui.components.ConfirmDialog
+import com.chuledigita.mobile.ui.components.FinanceHeaderIllustration
 import com.chuledigita.mobile.ui.components.MainScaffold
+import com.chuledigita.mobile.ui.components.ScreenHeaderBanner
 import com.chuledigita.mobile.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -90,6 +93,7 @@ fun FinanceScreen(
                         onSearch = viewModel::onSearchQueryChanged,
                         onDelete = viewModel::deleteMovement,
                         onUpdate = viewModel::updateMovement,
+                        onDeleteCustomer = viewModel::deleteCustomer,
                         onClearMessages = viewModel::clearMessages
                     )
                 }
@@ -107,6 +111,7 @@ fun FinanceContent(
     onSearch: (String) -> Unit,
     onDelete: (String) -> Unit,
     onUpdate: (String, String, Double, String) -> Unit,
+    onDeleteCustomer: (String, String) -> Unit,
     onClearMessages: () -> Unit
 ) {
     LazyColumn(
@@ -116,6 +121,43 @@ fun FinanceContent(
     ) {
         item {
             FinanceHeader(movementCount = state.totalMovementCount)
+        }
+
+        // 3 Finance Summary Cards (Total Balance, Total Debit, Total Credit)
+        item {
+            val totalDebit = state.customersWhoOwe.sumOf { kotlin.math.abs(it.balance) }
+            val totalCredit = state.customersWithCredit.sumOf { it.balance }
+            val netBalance = totalCredit - totalDebit
+            val isNegative = netBalance < 0
+            val balancePrefix = if (netBalance > 0) "+ " else if (isNegative) "− " else ""
+            val balanceColor = if (isNegative) ErrorColor else EmeraldGreen
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FinanceMetricMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Total Balance",
+                    value = "$balancePrefix${kotlin.math.abs(netBalance).toInt()} ETB",
+                    valueColor = balanceColor,
+                    isPositive = !isNegative
+                )
+                FinanceMetricMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Total Debit",
+                    value = "− ${totalDebit.toInt()} ETB",
+                    valueColor = ErrorColor,
+                    isPositive = false
+                )
+                FinanceMetricMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Total Credit",
+                    value = "+ ${totalCredit.toInt()} ETB",
+                    valueColor = EmeraldGreen,
+                    isPositive = true
+                )
+            }
         }
 
         item {
@@ -132,8 +174,8 @@ fun FinanceContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.08f)),
+                color = PureWhiteSurface,
+                border = BorderStroke(1.dp, BorderDivider),
                 shadowElevation = 2.dp
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -227,7 +269,8 @@ fun FinanceContent(
                                         CustomerBalanceItem(
                                             balance = balance,
                                             onDelete = onDelete,
-                                            onUpdate = onUpdate
+                                            onUpdate = onUpdate,
+                                            onDeleteCustomer = onDeleteCustomer
                                         )
                                     }
                                 }
@@ -274,7 +317,8 @@ fun FinanceContent(
                                         CustomerBalanceItem(
                                             balance = balance,
                                             onDelete = onDelete,
-                                            onUpdate = onUpdate
+                                            onUpdate = onUpdate,
+                                            onDeleteCustomer = onDeleteCustomer
                                         )
                                     }
                                 }
@@ -291,36 +335,67 @@ fun FinanceContent(
 
 @Composable
 fun FinanceHeader(movementCount: Int) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "ፋይናንስ",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = BrandGreen
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "የደንበኞችን ዕዳ እና የተከፈሉትን ብር ይዝገቡ።",
-                style = MaterialTheme.typography.bodyMedium,
-                color = BrandGreen.copy(alpha = 0.6f)
-            )
+    ScreenHeaderBanner(
+        title = "Finance",
+        subtitle = "Track income, expenses and keep your balance healthy.",
+        illustration = {
+            FinanceHeaderIllustration()
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Surface(
-            color = Color(0xFFE2F0F9),
-            shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+private fun FinanceMetricMiniCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String,
+    valueColor: Color,
+    isPositive: Boolean
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = PureWhiteSurface,
+        border = BorderStroke(1.dp, BorderDivider),
+        shadowElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    color = if (isPositive) LightMint else ErrorColor.copy(alpha = 0.1f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isPositive) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            contentDescription = null,
+                            tint = if (isPositive) EmeraldGreen else ErrorColor,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Text(
-                text = "$movementCount movements",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelSmall,
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2980B9)
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -483,9 +558,11 @@ fun RecordEntryForm(
 fun CustomerBalanceItem(
     balance: CustomerBalance,
     onDelete: (String) -> Unit,
-    onUpdate: (String, String, Double, String) -> Unit
+    onUpdate: (String, String, Double, String) -> Unit,
+    onDeleteCustomer: (String, String) -> Unit = { _, _ -> }
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showDeleteCustomerConfirm by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -517,11 +594,35 @@ fun CustomerBalanceItem(
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
 
+                IconButton(
+                    onClick = { showDeleteCustomerConfirm = true },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "ደንበኛውን ሰርዝ",
+                        tint = ErrorColor.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
                     tint = BrandGreen.copy(alpha = 0.3f),
                     modifier = Modifier.size(20.dp)
+                )
+            }
+
+            if (showDeleteCustomerConfirm) {
+                ConfirmDialog(
+                    title = "ደንበኛውን ሰርዝ",
+                    message = "ደንበኛውን '${balance.customerName}' እና ሁሉንም ተያያዥ የሂሳብ መረጃዎች መሰረዝ እንደሚፈልጉ እርግጠኛ ነዎት? ይህም በዳሽቦርድ ላይ የሚታየውን የደንበኞች ቁጥር በአንድ ይቀንሳል።",
+                    onConfirm = {
+                        onDeleteCustomer(balance.customerId, balance.customerName)
+                        showDeleteCustomerConfirm = false
+                    },
+                    onDismiss = { showDeleteCustomerConfirm = false }
                 )
             }
 

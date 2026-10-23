@@ -40,8 +40,18 @@ async function recordActivity({
       notificationType: activityType,
       title: activityType.replace(/_/g, " "),
       message: description || "A new business activity occurred.",
+      entityType,
+      entityId,
     });
   }
+
+  const socketService = require("./socketService");
+  socketService.emitToAll("dashboard:refresh", {
+    activityType,
+    entityType,
+    entityId,
+    timestamp: new Date().toISOString(),
+  });
 
   return activity;
 }

@@ -1,13 +1,17 @@
 package com.chuledigita.mobile.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,8 +24,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.chuledigita.mobile.domain.model.CustomerNote
+import com.chuledigita.mobile.ui.components.ConfirmDialog
 import com.chuledigita.mobile.ui.components.MainScaffold
-import com.chuledigita.mobile.ui.components.ReadOnlyMessage
+import com.chuledigita.mobile.ui.navigation.Screen
+import com.chuledigita.mobile.ui.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
@@ -38,21 +44,24 @@ fun CustomerDetailsScreen(
     var showAddNoteDialog by remember { mutableStateOf(false) }
     var newNoteText by remember { mutableStateOf("") }
     var isSavingNote by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var isDeletingCustomer by remember { mutableStateOf(false) }
 
     MainScaffold(
         navController = navController,
-        title = "የደንበኛ ዝርዝር",
+        title = "የደንበኛ ዝርዝር (Customer)",
         showBottomBar = false
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(OffWhiteBg)
                 .padding(paddingValues)
         ) {
             when (val state = uiState) {
                 is CustomerDetailsUiState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = EmeraldGreen)
                     }
                 }
 
@@ -66,17 +75,19 @@ fun CustomerDetailsScreen(
                     ) {
                         Text(
                             text = state.message,
-                            color = MaterialTheme.colorScheme.error,
+                            color = ErrorColor,
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = { viewModel.loadCustomerDetails() }
+                            onClick = { viewModel.loadCustomerDetails() },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("እንደገና ሞክር")
+                            Text("እንደገና ሞክር (Retry)")
                         }
                     }
                 }
@@ -87,55 +98,83 @@ fun CustomerDetailsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Profile Header
-                        Column(
+                        // Profile Header Card
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            shape = RoundedCornerShape(20.dp),
+                            color = PureWhiteSurface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderDivider),
+                            shadowElevation = 1.dp
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(24.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(80.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Outlined.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(40.dp),
-                                        tint = MaterialTheme.colorScheme.primary
+                                Surface(
+                                    shape = CircleShape,
+                                    color = LightMint,
+                                    border = androidx.compose.foundation.BorderStroke(1.5.dp, EmeraldGreen.copy(alpha = 0.3f)),
+                                    modifier = Modifier.size(76.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(40.dp),
+                                            tint = EmeraldGreen
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = customer.name,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                customer.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = phone,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = customer.name,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            customer.phone?.takeIf { it.isNotBlank() }?.let { phone ->
-                                Text(
-                                    text = phone,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
 
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                        // Basic Info
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            DetailItem("የተመዘገበበት ቀን", customer.registrationDate.substringBefore("T"))
-                            DetailItem("የተመዘገበው በ", customer.createdBy)
-                            val balanceText = if (customer.remainingBalanceAmount != 0.0) {
-                                "${customer.remainingBalanceAmount} ብር"
-                            } else {
-                                "0 ብር (የተስተካከለ)"
+                        // Basic Info Card
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            color = PureWhiteSurface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderDivider),
+                            shadowElevation = 1.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(
+                                    text = "መሰረታዊ መረጃ (Details)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandNavy
+                                )
+                                DetailItem("የተመዘገበበት ቀን", customer.registrationDate.substringBefore("T"))
+                                DetailItem("የተመዘገበው በ", customer.createdBy)
+                                val balanceText = if (customer.remainingBalanceAmount != 0.0) {
+                                    "${customer.remainingBalanceAmount} ብር"
+                                } else {
+                                    "0 ብር (የተስተካከለ)"
+                                }
+                                DetailItem("አጠቃላይ ሂሳብ", balanceText)
                             }
-                            DetailItem("አጠቃላይ ሂሳብ", balanceText)
                         }
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -186,7 +225,44 @@ fun CustomerDetailsScreen(
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
-                        ReadOnlyMessage(message = "የደንበኛ መረጃ ማስተካከል ወይም መሰረዝ በሲስተሙ አልተደገፈም።")
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { navController.navigate(Screen.EditCustomer.createRoute(customer.id)) },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldGreen),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldGreen)
+                            ) {
+                                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("ደንበኛ አርትዕ (Edit)")
+                            }
+
+                            Button(
+                                onClick = { showDeleteDialog = true },
+                                modifier = Modifier.weight(1f).height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ErrorColor),
+                                enabled = !isDeletingCustomer
+                            ) {
+                                if (isDeletingCustomer) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("ሰርዝ (Delete)")
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
@@ -263,6 +339,28 @@ fun CustomerDetailsScreen(
                 }
             )
         }
+
+        if (showDeleteDialog) {
+            ConfirmDialog(
+                title = "ደንበኛ ሰርዝ (Delete Customer)",
+                message = "ይህንን ደንበኛ መሰረዝ ይፈልጋሉ? ከፋይናንስ እንቅስቃሴ ጋር የተያያዙ ደንበኞች በሂሳብ ሚዛን ጥበቃ ምክንያት ሊሰረዙ አይችሉም። (Customers with associated financial transactions cannot be deleted).",
+                onConfirm = {
+                    showDeleteDialog = false
+                    isDeletingCustomer = true
+                    viewModel.deleteCustomer { success, msg ->
+                        isDeletingCustomer = false
+                        if (success) {
+                            navController.popBackStack()
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(msg)
+                            }
+                        }
+                    }
+                },
+                onDismiss = { showDeleteDialog = false }
+            )
+        }
     }
 }
 
@@ -270,10 +368,12 @@ fun CustomerDetailsScreen(
 private fun CustomerNoteItem(note: CustomerNote) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+            containerColor = PureWhiteSurface
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderDivider),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -282,21 +382,30 @@ private fun CustomerNoteItem(note: CustomerNote) {
             Text(
                 text = note.note,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = TextPrimary
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = note.authorName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = LightMint
+                ) {
+                    Text(
+                        text = note.authorName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldGreen,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
                 Text(
                     text = note.date.substringBefore("T"),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = TextSecondary
                 )
             }
         }
@@ -305,16 +414,21 @@ private fun CustomerNoteItem(note: CustomerNote) {
 
 @Composable
 private fun DetailItem(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
         )
     }
 }

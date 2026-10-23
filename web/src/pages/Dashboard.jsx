@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import FeedbackState from "../components/FeedbackState";
 import PageHeader from "../components/PageHeader";
+import DashboardCharts from "../components/DashboardCharts";
+import socket, { connectSocket } from "../services/socket";
 
 const formatAmount = (value) =>
   `${Number(value || 0).toLocaleString("en-US")} ብር`;
@@ -40,7 +42,38 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
+    connectSocket();
     loadDashboard(false);
+
+    function handleDashboardRefresh() {
+      loadDashboard(false);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadDashboard(false);
+      }
+    }
+
+    socket.on("dashboard:refresh", handleDashboardRefresh);
+    socket.on("customer:deleted", handleDashboardRefresh);
+    socket.on("customer:created", handleDashboardRefresh);
+    socket.on("customer:updated", handleDashboardRefresh);
+    socket.on("notification:new", handleDashboardRefresh);
+
+    window.addEventListener("focus", handleDashboardRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      socket.off("dashboard:refresh", handleDashboardRefresh);
+      socket.off("customer:deleted", handleDashboardRefresh);
+      socket.off("customer:created", handleDashboardRefresh);
+      socket.off("customer:updated", handleDashboardRefresh);
+      socket.off("notification:new", handleDashboardRefresh);
+
+      window.removeEventListener("focus", handleDashboardRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadDashboard]);
 
   if (loading)
@@ -71,17 +104,19 @@ function Dashboard() {
   const financial = dashboard?.financialMovements || {};
   const recentOrders = Array.isArray(dashboard?.recentOrders)
     ? dashboard.recentOrders
-    : [];
+    : (Array.isArray(dashboard?.activities?.recentOrders) ? dashboard.activities.recentOrders : []);
   const recentNotes = Array.isArray(dashboard?.recentNotes)
     ? dashboard.recentNotes
-    : [];
+    : (Array.isArray(dashboard?.activities?.recentNotes) ? dashboard.activities.recentNotes : []);
   const currentBalance = Number(financial.balance || 0);
 
   return (
     <div className="page-stack">
       <PageHeader
+        eyebrow="Executive Overview"
+        title="Dashboard"
         description="Your shared notes, orders, and customer balances in one place."
-        translation="ማስታወሻዎችን፣ ትዕዛዞችን እና የደንበኞችን ሂሳብ በአንድ ቦታ ይመልከቱ።"
+        theme="dashboard"
       />
       <div className="metric-grid dashboard-metrics">
         <Link className="metric-card dashboard-metric-link" to="/customers">
@@ -115,6 +150,13 @@ function Dashboard() {
           <small>Across all customers</small>
         </Link>
       </div>
+
+      <DashboardCharts
+        notes={notes}
+        orders={orders}
+        customers={customers}
+        financial={financial}
+      />
 
       <div className="dashboard-columns">
         <section className="panel">

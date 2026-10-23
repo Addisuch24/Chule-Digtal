@@ -17,8 +17,11 @@ class SocketManager(private val baseUrl: String) {
 
     private var socket: Socket? = null
     
-    private val _notificationsFlow = MutableSharedFlow<JSONObject>(replay = 1, extraBufferCapacity = 64)
+    private val _notificationsFlow = MutableSharedFlow<JSONObject>(replay = 0, extraBufferCapacity = 64)
     val notificationsFlow: SharedFlow<JSONObject> = _notificationsFlow.asSharedFlow()
+
+    private val _dashboardRefreshFlow = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 64)
+    val dashboardRefreshFlow: SharedFlow<Unit> = _dashboardRefreshFlow.asSharedFlow()
 
     private val _connectionEvents = MutableSharedFlow<String>(extraBufferCapacity = 5)
     val connectionEvents: SharedFlow<String> = _connectionEvents.asSharedFlow()
@@ -87,6 +90,24 @@ class SocketManager(private val baseUrl: String) {
                     logDebug("SocketManager", "Received notification: $data")
                     _notificationsFlow.tryEmit(data)
                 }
+            }
+
+            // Real-time dashboard refresh and customer change events
+            socket?.on("dashboard:refresh") {
+                logDebug("SocketManager", "Received dashboard:refresh")
+                _dashboardRefreshFlow.tryEmit(Unit)
+            }
+            socket?.on("customer:deleted") {
+                logDebug("SocketManager", "Received customer:deleted")
+                _dashboardRefreshFlow.tryEmit(Unit)
+            }
+            socket?.on("customer:created") {
+                logDebug("SocketManager", "Received customer:created")
+                _dashboardRefreshFlow.tryEmit(Unit)
+            }
+            socket?.on("customer:updated") {
+                logDebug("SocketManager", "Received customer:updated")
+                _dashboardRefreshFlow.tryEmit(Unit)
             }
 
             socket?.connect()

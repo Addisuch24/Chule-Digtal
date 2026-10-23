@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.*
@@ -89,6 +91,7 @@ class RealTimeSyncIntegrationTest {
 
     @Before
     fun setUp() = runBlocking {
+        Dispatchers.setMain(Dispatchers.Unconfined)
         com.chuledigita.mobile.data.remote.ApiConfig.BASE_URL = localApiBaseUrl
         // --- Setup Session A ---
         sessionRepoA = FakeSessionRepository()
@@ -165,6 +168,7 @@ class RealTimeSyncIntegrationTest {
         disposableMovementIds.clear()
 
         socketManagerB.disconnect()
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -210,10 +214,8 @@ class RealTimeSyncIntegrationTest {
 
         val testScope = CoroutineScope(Dispatchers.IO)
         val financeVmB = FinanceViewModel(
-            _financialRepository = financialRepoB,
-            _customerRepository = customerRepoB,
-            _notificationRepository = notificationRepoB,
-            externalScope = testScope
+            financialRepository = financialRepoB,
+            customerRepository = customerRepoB
         )
 
         delay(400)

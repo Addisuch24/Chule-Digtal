@@ -94,7 +94,7 @@ async function startServer() {
       });
     });
 
-    const serverInstance = httpServer.listen(PORT, () => {
+    const serverInstance = httpServer.listen(PORT, "0.0.0.0", () => {
       console.log(
         `Chule Digital API is running on http://localhost:${PORT}`
       );

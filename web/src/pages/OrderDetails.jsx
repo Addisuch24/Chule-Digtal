@@ -90,6 +90,7 @@ function OrderDetails() {
             Back to orders
           </Link>
         }
+        theme="orders"
       />
       {error && <p className="alert alert-error">{error}</p>}
 

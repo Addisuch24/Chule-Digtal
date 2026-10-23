@@ -1,0 +1,417 @@
+/* ============================================================
+   CHULE DIGITA — ROLE-SPECIFIC ANIMATED BUSINESS HERO HEADERS
+   Executive E-Commerce & Business Management Design System
+   High-Contrast Background Illustrations & Vibrant Accents
+   ============================================================ */
+
+/* Base Hero Header Container */
+.page-heading.hero-header {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: clamp(18px, 2.4vw, 26px) clamp(22px, 3vw, 32px);
+  margin-bottom: 2px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 20px -2px rgba(23, 50, 77, 0.05), 0 1px 3px 0 rgba(23, 50, 77, 0.02);
+  isolation: isolate;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Subtle Hover Elevation */
+.page-heading.hero-header:hover {
+  border-color: rgba(23, 50, 77, 0.16);
+  box-shadow: 0 8px 28px -4px rgba(23, 50, 77, 0.08), 0 2px 6px 0 rgba(23, 50, 77, 0.03);
+}
+
+/* Signature Top Accent Stripe (Echoing Login Page and primary panels) */
+.page-heading.hero-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3.5px;
+  background: var(--hero-accent-bar, linear-gradient(90deg, #17324D 0%, #355C7D 50%, #15966A 100%));
+  z-index: 3;
+}
+
+/* Background Layers */
+.hero-header-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Concentric Rings (Signature Login Page element) */
+.hero-bg-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(23, 50, 77, 0.08);
+}
+
+.hero-bg-ring-1 {
+  top: -60px;
+  right: -50px;
+  width: 280px;
+  height: 280px;
+}
+
+.hero-bg-ring-2 {
+  top: -120px;
+  right: -110px;
+  width: 420px;
+  height: 420px;
+  border-color: rgba(23, 50, 77, 0.06);
+}
+
+/* Ambient Radial Glow */
+.hero-bg-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(44px);
+  pointer-events: none;
+  opacity: 0.25;
+}
+
+.hero-bg-glow-right {
+  right: -30px;
+  top: -20px;
+  width: 260px;
+  height: 190px;
+  background: var(--hero-glow-color, rgba(21, 150, 106, 0.4));
+}
+
+.hero-bg-glow-left {
+  left: 10%;
+  bottom: -30px;
+  width: 190px;
+  height: 130px;
+  background: rgba(34, 72, 110, 0.08);
+}
+
+/* Ambient Fluid Wave Backdrop (matching reference images) */
+.hero-bg-wave {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: clamp(340px, 48vw, 680px);
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Themed Background SVG Art - Enhanced Visibility & Contrast */
+.hero-bg-art {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(260px, 34vw, 420px);
+  height: 100%;
+  max-height: 155px;
+  pointer-events: none;
+  opacity: var(--hero-art-opacity, 0.52);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--hero-art-color, #17324D);
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.hero-bg-art svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Foreground Content */
+.hero-header-content {
+  position: relative;
+  z-index: 2;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Eyebrow Badge */
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px 0;
+  align-self: flex-start;
+  padding: 3.5px 11px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--hero-badge-bg, rgba(23, 50, 77, 0.07));
+  color: var(--hero-badge-color, #17324D);
+  border: 1px solid var(--hero-badge-border, rgba(23, 50, 77, 0.14));
+  animation: heroEyebrowEnter 0.38s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.hero-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+@keyframes heroEyebrowEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animated Title H1 */
+.page-heading.hero-header h1.hero-title {
+  margin: 0;
+  font-size: clamp(1.95rem, 3.4vw, 2.55rem);
+  font-weight: 850;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--hero-title-color, #172B3A);
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+}
+
+/* Typography Words and Staggered Characters */
+.hero-title-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.hero-title-space {
+  display: inline-block;
+  width: 0.28em;
+}
+
+.hero-title-char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-10px);
+  animation: heroCharEnter 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--char-i, 0) * 0.024s + 0.04s);
+  will-change: transform, opacity;
+}
+
+@keyframes heroCharEnter {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Subtitle and Translations */
+.hero-description {
+  margin: 8px 0 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  max-width: 640px;
+  animation: heroDescEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.18s backwards;
+}
+
+.hero-translation {
+  margin-top: 5px;
+  color: var(--hero-translation-color, #15966A);
+  font-family: "Noto Sans Ethiopic", Nyala, "Segoe UI", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.5;
+  animation: heroDescEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.26s backwards;
+}
+
+@keyframes heroDescEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Action Container */
+.hero-header-action {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ============================================================
+   PAGE-SPECIFIC THEMES (Tuned for High Contrast & Definition)
+   ============================================================ */
+
+/* 1. Finance Theme: Deep navy, rich emerald, gold accent #D99A26 */
+.hero-theme-finance {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #15966A 50%, #D99A26 100%);
+  --hero-badge-bg: rgba(21, 150, 106, 0.1);
+  --hero-badge-color: #0E5E41;
+  --hero-badge-border: rgba(21, 150, 106, 0.25);
+  --hero-title-color: #0E3E2E;
+  --hero-glow-color: rgba(217, 154, 38, 0.26);
+  --hero-wave-color-1: rgba(21, 150, 106, 0.08);
+  --hero-wave-color-2: rgba(217, 154, 38, 0.07);
+  --hero-art-color: #15966A;
+  --hero-art-opacity: 0.52;
+  --hero-translation-color: #107553;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F3FAF6 55%, #FDF9EE 100%);
+}
+
+/* 2. Customers Theme: Clean blue #2878C7, teal #0F8B8D, slate navy */
+.hero-theme-customers {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #2878C7 50%, #0F8B8D 100%);
+  --hero-badge-bg: rgba(40, 120, 199, 0.1);
+  --hero-badge-color: #1E5088;
+  --hero-badge-border: rgba(40, 120, 199, 0.25);
+  --hero-title-color: #0F3762;
+  --hero-glow-color: rgba(15, 139, 141, 0.24);
+  --hero-wave-color-1: rgba(40, 120, 199, 0.08);
+  --hero-wave-color-2: rgba(15, 139, 141, 0.07);
+  --hero-art-color: #2878C7;
+  --hero-art-opacity: 0.52;
+  --hero-translation-color: #0F8B8D;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F0F8FF 55%, #EEFBFB 100%);
+}
+
+/* 3. Orders Theme: Navy #17324D, royal blue #2878C7, purple #7C3AED */
+.hero-theme-orders {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #2878C7 50%, #7C3AED 100%);
+  --hero-badge-bg: rgba(124, 58, 237, 0.1);
+  --hero-badge-color: #5B21B6;
+  --hero-badge-border: rgba(124, 58, 237, 0.24);
+  --hero-title-color: #1A284F;
+  --hero-glow-color: rgba(124, 58, 237, 0.24);
+  --hero-wave-color-1: rgba(40, 120, 199, 0.08);
+  --hero-wave-color-2: rgba(124, 58, 237, 0.07);
+  --hero-art-color: #2878C7;
+  --hero-art-opacity: 0.52;
+  --hero-translation-color: #2878C7;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F5F3FF 55%, #EFF6FF 100%);
+}
+
+/* 4. Notes Theme: Warm amber #D99A26, rich espresso #38240D, emerald #15966A */
+.hero-theme-notes {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #D99A26 50%, #15966A 100%);
+  --hero-badge-bg: rgba(217, 154, 38, 0.12);
+  --hero-badge-color: #925C05;
+  --hero-badge-border: rgba(217, 154, 38, 0.28);
+  --hero-title-color: #38240D;
+  --hero-glow-color: rgba(217, 154, 38, 0.28);
+  --hero-wave-color-1: rgba(217, 154, 38, 0.09);
+  --hero-wave-color-2: rgba(21, 150, 106, 0.07);
+  --hero-art-color: #D99A26;
+  --hero-art-opacity: 0.54;
+  --hero-translation-color: #15966A;
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFFDF5 55%, #F0FDF4 100%);
+}
+
+/* 5. Dashboard Theme: Executive navy #17324D, business emerald #15966A, teal #0F8B8D */
+.hero-theme-dashboard {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #0F8B8D 50%, #15966A 100%);
+  --hero-badge-bg: rgba(23, 50, 77, 0.08);
+  --hero-badge-color: #17324D;
+  --hero-badge-border: rgba(23, 50, 77, 0.18);
+  --hero-title-color: #11283D;
+  --hero-glow-color: rgba(21, 150, 106, 0.26);
+  --hero-wave-color-1: rgba(15, 139, 141, 0.08);
+  --hero-wave-color-2: rgba(21, 150, 106, 0.08);
+  --hero-art-color: #17324D;
+  --hero-art-opacity: 0.52;
+  --hero-translation-color: #15966A;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F7FAFC 55%, #F0FDF8 100%);
+}
+
+/* 6. Notifications Theme: Rich indigo #4F46E5, amber #D99A26, navy #17324D */
+.hero-theme-notifications {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #4F46E5 50%, #D99A26 100%);
+  --hero-badge-bg: rgba(79, 70, 229, 0.1);
+  --hero-badge-color: #3730A3;
+  --hero-badge-border: rgba(79, 70, 229, 0.24);
+  --hero-title-color: #1E1B4B;
+  --hero-glow-color: rgba(79, 70, 229, 0.26);
+  --hero-wave-color-1: rgba(79, 70, 229, 0.08);
+  --hero-wave-color-2: rgba(217, 154, 38, 0.06);
+  --hero-art-color: #4F46E5;
+  --hero-art-opacity: 0.52;
+  --hero-translation-color: #4F46E5;
+  background: linear-gradient(135deg, #FFFFFF 0%, #EEF2FF 55%, #FEF9EE 100%);
+}
+
+/* 7. Profile Theme: Identity navy #17324D, emerald #15966A, silver-slate */
+.hero-theme-profile {
+  --hero-accent-bar: linear-gradient(90deg, #17324D 0%, #15966A 50%, #355C7D 100%);
+  --hero-badge-bg: rgba(21, 150, 106, 0.1);
+  --hero-badge-color: #0E5E41;
+  --hero-badge-border: rgba(21, 150, 106, 0.24);
+  --hero-title-color: #0E3429;
+  --hero-glow-color: rgba(21, 150, 106, 0.24);
+  --hero-wave-color-1: rgba(21, 150, 106, 0.08);
+  --hero-wave-color-2: rgba(23, 50, 77, 0.07);
+  --hero-art-color: #15966A;
+  --hero-art-opacity: 0.50;
+  --hero-translation-color: #15966A;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F2FDF7 55%, #F8FAFC 100%);
+}
+
+/* ============================================================
+   RESPONSIVENESS & ACCESSIBILITY
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .page-heading.hero-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px 20px 18px;
+  }
+
+  .hero-header-action {
+    align-self: flex-start;
+  }
+
+  .hero-bg-art {
+    opacity: 0.22;
+    width: 200px;
+    right: 4px;
+  }
+}
+
+/* Respect User Reduced Motion Preference */
+@media (prefers-reduced-motion: reduce) {
+  .hero-title-char,
+  .hero-eyebrow,
+  .hero-description,
+  .hero-translation {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

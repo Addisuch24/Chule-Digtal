@@ -99,10 +99,27 @@ async function deleteBusinessNote(noteId) {
   return result.affectedRows > 0;
 }
 
+async function deleteBusinessNotes(noteIds) {
+  if (!Array.isArray(noteIds) || noteIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [] };
+  }
+
+  const [result] = await pool.query(
+    "DELETE FROM business_notes WHERE id IN (?)",
+    [noteIds]
+  );
+
+  return {
+    deletedCount: result.affectedRows,
+    deletedIds: noteIds,
+  };
+}
+
 module.exports = {
   createBusinessNote,
   getAllBusinessNotes,
   getBusinessNoteById,
   updateBusinessNote,
   deleteBusinessNote,
+  deleteBusinessNotes,
 };

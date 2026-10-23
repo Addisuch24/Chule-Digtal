@@ -35,6 +35,9 @@ class CustomersViewModel(
             viewModelScope.launch {
                 notificationRepository.realtimeEventFlow.collect { event ->
                     if (event.type == NotificationType.CUSTOMER_CREATED ||
+                        event.type == NotificationType.CUSTOMER_UPDATED ||
+                        event.type == NotificationType.CUSTOMER_DELETED ||
+                        event.type == NotificationType.CUSTOMER_BULK_DELETED ||
                         event.type == NotificationType.CUSTOMER_NOTE_CREATED) {
                         loadCustomers()
                     }
@@ -43,34 +46,45 @@ class CustomersViewModel(
         }
     }
 
-    fun loadCustomers() {
+    fun loadCustomers(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.value = CustomersUiState.Loading
+            if (showLoading && _uiState.value !is CustomersUiState.Success) {
+                _uiState.value = CustomersUiState.Loading
+            }
             val result = customerRepository.getCustomers()
             result.fold(
                 onSuccess = { list ->
-                    if (list.isEmpty()) {
+                    // Group records under the same customer name so each customer name is only counted as one
+                    val distinctCustomers = list.groupBy { it.name.trim().lowercase() }.map { (_, group) ->
+                        group.first()
+                    }
+                    if (distinctCustomers.isEmpty()) {
                         _uiState.value = CustomersUiState.Empty
                     } else {
                         val current = _uiState.value
                         if (current is CustomersUiState.Success) {
-                            _uiState.value = current.copy(customers = list)
+                            _uiState.value = current.copy(customers = distinctCustomers)
                         } else {
-                            _uiState.value = CustomersUiState.Success(customers = list)
+                            _uiState.value = CustomersUiState.Success(customers = distinctCustomers)
                         }
                     }
                 },
                 onFailure = { error ->
-                    _uiState.value = CustomersUiState.Error(
-                        error.message ?: "Failed to fetch customers from server."
-                    )
+                    val current = _uiState.value
+                    if (current is CustomersUiState.Success) {
+                        _uiState.value = current.copy(actionError = error.message)
+                    } else {
+                        _uiState.value = CustomersUiState.Error(
+                            error.message ?: "Failed to fetch customers from server."
+                        )
+                    }
                 }
             )
         }
     }
 
     fun refresh() {
-        loadCustomers()
+        loadCustomers(showLoading = true)
     }
 
     fun onSearchQueryChanged(query: String) {
@@ -86,6 +100,141 @@ class CustomersViewModel(
             _uiState.update { currentState.copy(selectedFilter = filter) }
         }
     }
+
+    fun toggleSelectCustomer(customerId: String) {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        val updated = if (currentState.selectedIds.contains(customerId)) {
+            currentState.selectedIds - customerId
+        } else {
+            currentState.selectedIds + customerId
+        }
+        _uiState.value = currentState.copy(selectedIds = updated)
+    }
+
+    fun selectAllCustomers(visibleCustomerIds: List<String>) {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        val allSelected = visibleCustomerIds.isNotEmpty() && currentState.selectedIds.containsAll(visibleCustomerIds)
+        val updated = if (allSelected) {
+            emptySet()
+        } else {
+            visibleCustomerIds.toSet()
+        }
+        _uiState.value = currentState.copy(selectedIds = updated)
+    }
+
+    fun clearCustomerSelection() {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        _uiState.value = currentState.copy(selectedIds = emptySet())
+    }
+
+    fun deleteCustomer(customerId: String, onComplete: ((Boolean, String) -> Unit)? = null) {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        viewModelScope.launch {
+            _uiState.value = currentState.copy(isDeleting = true, actionMessage = null, actionError = null)
+            val result = customerRepository.deleteCustomer(customerId)
+            result.fold(
+                onSuccess = {
+                    val remaining = currentState.customers.filterNot { it.id == customerId }
+                    val message = "ደንበኛው በተሳካ ሁኔታ ተሰርዟል።"
+                    if (remaining.isEmpty()) {
+                        _uiState.value = CustomersUiState.Empty
+                    } else {
+                        _uiState.value = currentState.copy(
+                            customers = remaining,
+                            selectedIds = currentState.selectedIds - customerId,
+                            isDeleting = false,
+                            actionMessage = message,
+                            actionError = null
+                        )
+                    }
+                    loadCustomers(showLoading = false)
+                    onComplete?.invoke(true, message)
+                },
+                onFailure = { error ->
+                    val current = _uiState.value as? CustomersUiState.Success ?: currentState
+                    val errMsg = error.message ?: "ደንበኛውን መሰረዝ አልተቻለም።"
+                    _uiState.value = current.copy(
+                        isDeleting = false,
+                        actionError = errMsg,
+                        actionMessage = null
+                    )
+                    onComplete?.invoke(false, errMsg)
+                }
+            )
+        }
+    }
+
+    fun bulkDeleteSelectedCustomers(onComplete: ((deletedCount: Int, skippedCount: Int, message: String) -> Unit)? = null) {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        val idsToDelete = currentState.selectedIds.toList()
+        if (idsToDelete.isEmpty() || currentState.isDeleting) return
+
+        viewModelScope.launch {
+            _uiState.value = currentState.copy(isDeleting = true, actionMessage = null, actionError = null)
+            val result = customerRepository.bulkDeleteCustomers(idsToDelete)
+            result.fold(
+                onSuccess = { data ->
+                    val skippedCount = data.skipped?.size ?: 0
+                    if (data.deletedCount == 0) {
+                        val reason = data.skipped?.firstOrNull()?.reason
+                            ?: "ደንበኞችን መሰረዝ አልተቻለም። ከፋይናንስ እንቅስቃሴ ጋር የተያያዙ መረጃዎች ተጠብቀው መቆየት አለባቸው።"
+                        val current = _uiState.value as? CustomersUiState.Success
+                        if (current != null) {
+                            _uiState.value = current.copy(
+                                selectedIds = emptySet(),
+                                isDeleting = false,
+                                actionError = reason,
+                                actionMessage = null
+                            )
+                        }
+                        onComplete?.invoke(0, skippedCount, reason)
+                        return@fold
+                    }
+
+                    val deletedIdSet = data.deletedIds.map { it.toString() }.toSet().ifEmpty { idsToDelete.toSet() }
+                    val current = _uiState.value as? CustomersUiState.Success ?: currentState
+                    val remaining = current.customers.filterNot { it.id in deletedIdSet }
+
+                    val message = if (skippedCount > 0) {
+                        "${data.deletedCount} ደንበኞች ተሰርዘዋል። $skippedCount ደንበኞች ከፋይናንስ እንቅስቃሴ ጋር የተያያዙ በመሆናቸው ተጠብቀዋል።"
+                    } else {
+                        "${data.deletedCount} ደንበኞች በተሳካ ሁኔታ ተሰርዘዋል።"
+                    }
+
+                    if (remaining.isEmpty()) {
+                        _uiState.value = CustomersUiState.Empty
+                    } else {
+                        _uiState.value = current.copy(
+                            customers = remaining,
+                            selectedIds = emptySet(),
+                            isDeleting = false,
+                            actionMessage = message,
+                            actionError = null
+                        )
+                    }
+                    loadCustomers(showLoading = false)
+                    onComplete?.invoke(data.deletedCount, skippedCount, message)
+                },
+                onFailure = { error ->
+                    val current = _uiState.value as? CustomersUiState.Success ?: currentState
+                    val errMsg = error.message ?: "ደንበኞችን መሰረዝ አልተቻለም።"
+                    _uiState.value = current.copy(
+                        selectedIds = emptySet(),
+                        isDeleting = false,
+                        actionError = errMsg,
+                        actionMessage = null
+                    )
+                    onComplete?.invoke(0, 0, errMsg)
+                }
+            )
+        }
+    }
+
+    fun clearActionMessages() {
+        val currentState = _uiState.value as? CustomersUiState.Success ?: return
+        _uiState.value = currentState.copy(actionMessage = null, actionError = null)
+    }
+
 
     fun createCustomer(
         name: String,
@@ -105,6 +254,30 @@ class CustomersViewModel(
                 },
                 onFailure = { error ->
                     onComplete(false, error.message ?: "Failed to create customer")
+                }
+            )
+        }
+    }
+
+    fun updateCustomer(
+        customerId: String,
+        name: String,
+        phone: String?,
+        note: String?,
+        onComplete: (success: Boolean, message: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = customerRepository.updateCustomer(customerId = customerId, name = name, phone = phone)
+            result.fold(
+                onSuccess = { updatedCustomer ->
+                    if (!note.isNullOrBlank()) {
+                        customerRepository.createCustomerNote(updatedCustomer.id, note.trim())
+                    }
+                    refresh()
+                    onComplete(true, "ደንበኛ በተሳካ ሁኔታ ተሻሽሏል")
+                },
+                onFailure = { error ->
+                    onComplete(false, error.message ?: "Failed to update customer")
                 }
             )
         }

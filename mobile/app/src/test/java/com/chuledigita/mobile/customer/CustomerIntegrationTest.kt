@@ -192,5 +192,75 @@ class CustomerIntegrationTest {
         assertTrue(allCustomersResult.isSuccess)
         val allCustomers = allCustomersResult.getOrNull() ?: emptyList()
         assertTrue("Newly created customer must appear in customer list", allCustomers.any { it.id == created.id })
+
+        // Clean up
+        customerRepository.bulkDeleteCustomers(listOf(created.id))
+        Unit
+    }
+
+    @Test
+    fun testExistingCustomerEdit_DoesNotIncreaseCustomerCount_AndFetchedCorrectlyOnDashboard(): Unit = runBlocking {
+        val uniqueName = "COUNT_SAFEGUARD_TEST_${System.currentTimeMillis()}"
+        val initialPhone = "0911001122"
+        val updatedPhone = "0911009988"
+
+        // 1. Initial dashboard summary
+        val dashBefore = apiService.getDashboardSummary()
+        assertTrue(dashBefore.isSuccessful)
+        val countBefore = dashBefore.body()?.data?.customers?.total ?: 0
+
+        // 2. Create customer
+        val createResult = customerRepository.createCustomer(uniqueName, initialPhone)
+        assertTrue(createResult.isSuccess)
+        val created = createResult.getOrNull()
+        assertNotNull(created)
+
+        // 3. Verify count increased by 1 on dashboard
+        val dashAfterCreate = apiService.getDashboardSummary()
+        assertTrue(dashAfterCreate.isSuccessful)
+        val countAfterCreate = dashAfterCreate.body()?.data?.customers?.total ?: 0
+        assertEquals(countBefore + 1, countAfterCreate)
+
+        // 4. Re-creating/editing existing customer with new phone under the same name MUST NOT increase customer count
+        val reCreateResult = customerRepository.createCustomer(uniqueName, updatedPhone)
+        assertTrue(reCreateResult.isSuccess)
+        val reCreated = reCreateResult.getOrNull()
+        assertNotNull(reCreated)
+        assertEquals("Re-submitting existing customer must retain original customer ID", created!!.id, reCreated!!.id)
+        assertEquals("Phone should be updated in-place", updatedPhone, reCreated.phone)
+
+        // 5. Dashboard count MUST NOT increase
+        val dashAfterReCreate = apiService.getDashboardSummary()
+        assertTrue(dashAfterReCreate.isSuccessful)
+        val countAfterReCreate = dashAfterReCreate.body()?.data?.customers?.total ?: 0
+        assertEquals("Customer count on dashboard must not increase when existing customer is edited", countAfterCreate, countAfterReCreate)
+
+        // 6. Explicitly update customer via PATCH endpoint
+        val updateResult = customerRepository.updateCustomer(created.id, "$uniqueName-MOD", "0911007766")
+        assertTrue("Updating customer via updateCustomer must succeed", updateResult.isSuccess)
+        val updated = updateResult.getOrNull()
+        assertNotNull(updated)
+        assertEquals(created.id, updated!!.id)
+        assertEquals("$uniqueName-MOD", updated.name)
+        assertEquals("0911007766", updated.phone)
+
+        // 7. Dashboard count MUST still be unchanged
+        val dashAfterUpdate = apiService.getDashboardSummary()
+        assertTrue(dashAfterUpdate.isSuccessful)
+        val countAfterUpdate = dashAfterUpdate.body()?.data?.customers?.total ?: 0
+        assertEquals("Customer count on dashboard must remain identical after customer details update", countAfterCreate, countAfterUpdate)
+
+        // 8. Test Customer Deletion is working and accurately decrements dashboard count
+        val deleteResult = customerRepository.bulkDeleteCustomers(listOf(created.id))
+        assertTrue("Customer deletion must succeed: ${deleteResult.exceptionOrNull()?.message}", deleteResult.isSuccess)
+        val deleteData = deleteResult.getOrNull()
+        assertNotNull(deleteData)
+        assertEquals(1, deleteData!!.deletedCount)
+
+        // 9. Verify dashboard count decremented back to countBefore
+        val dashAfterDelete = apiService.getDashboardSummary()
+        assertTrue(dashAfterDelete.isSuccessful)
+        val countAfterDelete = dashAfterDelete.body()?.data?.customers?.total ?: 0
+        assertEquals("Customer deletion must decrement customer count on dashboard back to initial", countBefore, countAfterDelete)
     }
 }

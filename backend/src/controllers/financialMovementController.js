@@ -308,16 +308,32 @@ async function deleteFinancialMovement(req, res) {
       });
     }
 
-    const deleted = await financialMovementModel.deleteFinancialMovement(
+    const result = await financialMovementModel.deleteFinancialMovement(
       Number(movementId)
     );
 
-    if (!deleted) {
+    if (result.blocked) {
+      return res.status(400).json({
+        success: false,
+        message: result.reason,
+      });
+    }
+
+    if (!result.success) {
       return res.status(404).json({
         success: false,
         message: "Financial movement not found",
       });
     }
+
+    await activityService.recordActivity({
+      actorId: Number(req.user.id),
+      activityType: "FINANCIAL_MOVEMENT_DELETED",
+      entityType: "FINANCIAL_MOVEMENT",
+      entityId: Number(movementId),
+      description: `Financial movement #${movementId} was deleted`,
+      metadata: { movementId: Number(movementId) },
+    });
 
     return res.status(200).json({
       success: true,
@@ -329,6 +345,72 @@ async function deleteFinancialMovement(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to delete financial movement",
+    });
+  }
+}
+
+async function deleteFinancialMovements(req, res) {
+  try {
+    const rawIds = req.body.movementIds || req.body.ids;
+    const deletedBy = Number(req.user.id);
+
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of movement IDs ('movementIds' or 'ids') is required",
+      });
+    }
+
+    if (rawIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete more than 100 movements at a time",
+      });
+    }
+
+    const validIds = rawIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid movement IDs provided",
+      });
+    }
+
+    const result = await financialMovementModel.deleteFinancialMovements(validIds);
+
+    if (result.deletedCount > 0) {
+      await activityService.recordActivity({
+        actorId: deletedBy,
+        activityType: "FINANCIAL_MOVEMENT_BULK_DELETED",
+        entityType: "FINANCIAL_MOVEMENT",
+        entityId: result.deletedIds[0],
+        description: `${result.deletedCount} financial movement(s) were deleted`,
+        metadata: {
+          deletedCount: result.deletedCount,
+          movementIds: result.deletedIds,
+          skipped: result.skipped,
+        },
+      });
+    }
+
+    let message = `${result.deletedCount} financial movement(s) deleted successfully`;
+    if (result.skipped && result.skipped.length > 0) {
+      message = `${result.deletedCount} deleted, ${result.skipped.length} skipped (verified records cannot be deleted)`;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete financial movements error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete financial movements",
     });
   }
 }
@@ -740,6 +822,7 @@ module.exports = {
   getAllFinancialMovements,
   updateFinancialMovement,
   deleteFinancialMovement,
+  deleteFinancialMovements,
   verifyFinancialMovement,
   rejectFinancialMovement,
   getCustomerBalance,

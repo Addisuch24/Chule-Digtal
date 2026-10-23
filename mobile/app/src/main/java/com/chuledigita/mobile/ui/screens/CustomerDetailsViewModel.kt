@@ -79,6 +79,20 @@ class CustomerDetailsViewModel(
         }
     }
 
+    fun deleteCustomer(onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val result = customerRepository.deleteCustomer(customerId)
+            result.fold(
+                onSuccess = {
+                    onComplete(true, "ደንበኛው በተሳካ ሁኔታ ተሰርዟል።")
+                },
+                onFailure = { error ->
+                    onComplete(false, error.message ?: "ደንበኛውን መሰረዝ አልተቻለም።")
+                }
+            )
+        }
+    }
+
     companion object {
         fun provideFactory(customerId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {

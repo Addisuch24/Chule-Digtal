@@ -84,7 +84,11 @@ class OrdersViewModel(
         successMsg: String? = null,
         errorMsg: String? = null,
         editing: Order? = null,
-        submitting: Boolean = false
+        submitting: Boolean = false,
+        selectedIds: Set<String>? = null,
+        deletingBatch: Boolean = false,
+        batchMsg: String? = null,
+        batchErr: String? = null
     ) {
         val filtered = if (currentSearchQuery.isBlank()) {
             allOrders
@@ -103,15 +107,22 @@ class OrdersViewModel(
         }
         val completed = filtered.filter { it.status == OrderStatus.COMPLETED }
 
+        val currentSuccess = _uiState.value as? OrdersUiState.Success
+        val currentIds = selectedIds ?: currentSuccess?.selectedOrderIds ?: emptySet()
+
         _uiState.value = OrdersUiState.Success(
             orders = filtered,
             activeOrders = active,
             completedOrders = completed,
             searchQuery = currentSearchQuery,
             editingOrder = editing,
+            selectedOrderIds = currentIds,
             isSubmitting = submitting,
+            isDeletingBatch = deletingBatch,
             successMessage = successMsg,
-            errorMessage = errorMsg
+            errorMessage = errorMsg,
+            batchDeleteMessage = batchMsg,
+            batchDeleteError = batchErr
         )
     }
 
@@ -261,6 +272,103 @@ class OrdersViewModel(
             }
         }
     }
+
+    fun toggleSelectOrder(orderId: String) {
+        val currentState = _uiState.value as? OrdersUiState.Success ?: return
+        val updated = if (currentState.selectedOrderIds.contains(orderId)) {
+            currentState.selectedOrderIds - orderId
+        } else {
+            currentState.selectedOrderIds + orderId
+        }
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingOrder,
+            submitting = currentState.isSubmitting,
+            selectedIds = updated
+        )
+    }
+
+    fun selectAllOrders(visibleIds: List<String>) {
+        val currentState = _uiState.value as? OrdersUiState.Success ?: return
+        val allSelected = visibleIds.isNotEmpty() && currentState.selectedOrderIds.containsAll(visibleIds)
+        val updated = if (allSelected) emptySet() else visibleIds.toSet()
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingOrder,
+            submitting = currentState.isSubmitting,
+            selectedIds = updated
+        )
+    }
+
+    fun clearOrderSelection() {
+        val currentState = _uiState.value as? OrdersUiState.Success ?: return
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingOrder,
+            submitting = currentState.isSubmitting,
+            selectedIds = emptySet()
+        )
+    }
+
+    fun bulkDeleteSelectedOrders(onComplete: ((deletedCount: Int, skippedCount: Int, message: String) -> Unit)? = null) {
+        val currentState = _uiState.value as? OrdersUiState.Success ?: return
+        val idsToDelete = currentState.selectedOrderIds.toList()
+        if (idsToDelete.isEmpty() || currentState.isDeletingBatch) return
+
+        scope.launch {
+            updateState(
+                editing = currentState.editingOrder,
+                selectedIds = currentState.selectedOrderIds,
+                deletingBatch = true
+            )
+            val result = _orderRepository.bulkDeleteOrders(idsToDelete)
+            result.onSuccess { data ->
+                val deletedIdSet = data.deletedIds.map { it.toString() }.toSet().ifEmpty { idsToDelete.toSet() }
+                allOrders = allOrders.filterNot { it.id in deletedIdSet }
+                val refreshResult = _orderRepository.getOrders()
+                if (refreshResult.isSuccess) {
+                    allOrders = refreshResult.getOrNull() ?: allOrders
+                }
+                val skippedCount = data.skipped?.size ?: 0
+                val msg = if (skippedCount > 0) {
+                    "${data.deletedCount} ትዕዛዞች በተሳካ ሁኔታ ተሰርዘዋል። $skippedCount ትዕዛዞች ከፋይናንስ ጋር የተያያዙ በመሆናቸው ተጠብቀዋል።"
+                } else {
+                    "${data.deletedCount} ትዕዛዞች በተሳካ ሁኔታ ተሰርዘዋል።"
+                }
+                updateState(
+                    selectedIds = emptySet(),
+                    deletingBatch = false,
+                    successMsg = msg,
+                    batchMsg = msg
+                )
+                onComplete?.invoke(data.deletedCount, skippedCount, msg)
+            }.onFailure { error ->
+                val errMsg = error.message ?: "ትዕዛዞችን መሰረዝ አልተቻለም።"
+                updateState(
+                    editing = currentState.editingOrder,
+                    selectedIds = currentState.selectedOrderIds,
+                    deletingBatch = false,
+                    errorMsg = errMsg,
+                    batchErr = errMsg
+                )
+                onComplete?.invoke(0, 0, errMsg)
+            }
+        }
+    }
+
+    fun clearBatchDeleteMessages() {
+        val currentState = _uiState.value as? OrdersUiState.Success ?: return
+        updateState(
+            editing = currentState.editingOrder,
+            selectedIds = currentState.selectedOrderIds,
+            batchMsg = null,
+            batchErr = null
+        )
+    }
+
 
     fun verifyOrder(orderId: String, note: String? = null) {
         val currentState = _uiState.value as? OrdersUiState.Success

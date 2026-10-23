@@ -19,4 +19,20 @@ router.get(
   customerNoteController.getCustomerNotes
 );
 
+// Bulk delete customer notes
+router.post(
+  "/:customerId/notes/bulk-delete",
+  customerNoteController.deleteCustomerNotes
+);
+router.delete(
+  "/:customerId/notes/bulk",
+  customerNoteController.deleteCustomerNotes
+);
+
+// Delete single customer note
+router.delete(
+  "/:customerId/notes/:noteId",
+  customerNoteController.deleteCustomerNote
+);
+
 module.exports = router;

@@ -3,6 +3,7 @@ package com.chuledigita.mobile.data.remote
 import android.util.Log
 import com.chuledigita.mobile.BuildConfig
 import com.chuledigita.mobile.domain.repository.SessionRepository
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -30,10 +31,24 @@ class AuthInterceptor(private val sessionRepository: SessionRepository) : Interc
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
+        // Dynamically redirect host and port if ApiConfig.BASE_URL was updated at runtime
+        val targetHttpUrl = runCatching {
+            val configuredUrl = ApiConfig.BASE_URL.toHttpUrlOrNull()
+            if (configuredUrl != null && (originalRequest.url.host != configuredUrl.host || originalRequest.url.port != configuredUrl.port)) {
+                originalRequest.url.newBuilder()
+                    .scheme(configuredUrl.scheme)
+                    .host(configuredUrl.host)
+                    .port(configuredUrl.port)
+                    .build()
+            } else {
+                originalRequest.url
+            }
+        }.getOrDefault(originalRequest.url)
+
         // Retrieve the token from in-memory cache managed by SessionRepository
         val token = sessionRepository.getCachedToken()
 
-        val requestBuilder = originalRequest.newBuilder()
+        val requestBuilder = originalRequest.newBuilder().url(targetHttpUrl)
 
         // Inject Bearer token if it exists and Authorization header is not already specified
         if (!token.isNullOrBlank() && originalRequest.header("Authorization") == null) {

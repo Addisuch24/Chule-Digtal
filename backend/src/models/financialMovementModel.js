@@ -335,12 +335,70 @@ async function updateFinancialMovement({
 }
 
 async function deleteFinancialMovement(movementId) {
+  const [rows] = await pool.execute(
+    "SELECT id, verification_status FROM financial_movements WHERE id = ?",
+    [movementId]
+  );
+
+  if (rows.length === 0) {
+    return { success: false, blocked: false, notFound: true };
+  }
+
+  if (rows[0].verification_status === "VERIFIED") {
+    return {
+      success: false,
+      blocked: true,
+      reason: "Verified financial records cannot be permanently deleted to preserve accounting audit accuracy",
+    };
+  }
+
   const [result] = await pool.execute(
     "DELETE FROM financial_movements WHERE id = ?",
     [movementId]
   );
 
-  return result.affectedRows > 0;
+  return { success: result.affectedRows > 0, blocked: false };
+}
+
+async function deleteFinancialMovements(movementIds) {
+  if (!Array.isArray(movementIds) || movementIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [], skipped: [] };
+  }
+
+  // Prevent deleting verified financial movements to preserve accounting audit accuracy
+  const [rows] = await pool.query(
+    "SELECT id, verification_status FROM financial_movements WHERE id IN (?)",
+    [movementIds]
+  );
+
+  const eligibleIds = [];
+  const skipped = [];
+
+  for (const row of rows) {
+    if (row.verification_status === "VERIFIED") {
+      skipped.push({
+        id: Number(row.id),
+        reason: "Verified financial records cannot be permanently deleted to preserve accounting audit accuracy",
+      });
+    } else {
+      eligibleIds.push(Number(row.id));
+    }
+  }
+
+  if (eligibleIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [], skipped };
+  }
+
+  const [result] = await pool.query(
+    "DELETE FROM financial_movements WHERE id IN (?)",
+    [eligibleIds]
+  );
+
+  return {
+    deletedCount: result.affectedRows,
+    deletedIds: eligibleIds,
+    skipped,
+  };
 }
 
 async function getCustomerBalance(customerId) {
@@ -435,6 +493,7 @@ module.exports = {
   getAllFinancialMovements,
   updateFinancialMovement,
   deleteFinancialMovement,
+  deleteFinancialMovements,
   verifyFinancialMovement,
   rejectFinancialMovement,
   getCustomerBalance,

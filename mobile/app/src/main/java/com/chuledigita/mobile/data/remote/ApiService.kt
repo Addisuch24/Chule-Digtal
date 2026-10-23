@@ -41,6 +41,18 @@ interface ApiService {
     @GET("customers/{customerId}/balance")
     suspend fun getCustomerBalance(@Path("customerId") customerId: Long): Response<CustomerBalanceResponse>
 
+    @DELETE("customers/{customerId}")
+    suspend fun deleteCustomer(@Path("customerId") customerId: Long): Response<Void>
+
+    @PATCH("customers/{customerId}")
+    suspend fun updateCustomer(
+        @Path("customerId") customerId: Long,
+        @Body request: CreateCustomerRequest
+    ): Response<CustomerResponse>
+
+    @POST("customers/bulk-delete")
+    suspend fun bulkDeleteCustomers(@Body request: BulkDeleteCustomersRequest): Response<BulkDeleteResponse>
+
     // ============================================================
     // DASHBOARD
     // ============================================================
@@ -78,6 +90,9 @@ interface ApiService {
     @DELETE("orders/{orderId}")
     suspend fun deleteOrder(@Path("orderId") orderId: Long): Response<Void>
 
+    @POST("orders/bulk-delete")
+    suspend fun bulkDeleteOrders(@Body request: BulkDeleteOrdersRequest): Response<BulkDeleteResponse>
+
     @PATCH("orders/{orderId}/status")
     suspend fun updateOrderStatus(
         @Path("orderId") orderId: Long,
@@ -109,6 +124,18 @@ interface ApiService {
     @GET("customers/{customerId}/notes")
     suspend fun getCustomerNotes(@Path("customerId") customerId: Long): Response<NoteListResponse>
 
+    @DELETE("customers/{customerId}/notes/{noteId}")
+    suspend fun deleteCustomerNote(
+        @Path("customerId") customerId: Long,
+        @Path("noteId") noteId: Long
+    ): Response<Void>
+
+    @POST("customers/{customerId}/notes/bulk-delete")
+    suspend fun bulkDeleteCustomerNotes(
+        @Path("customerId") customerId: Long,
+        @Body request: BulkDeleteNotesRequest
+    ): Response<BulkDeleteResponse>
+
     // ============================================================
     // GLOBAL BUSINESS NOTES
     // ============================================================
@@ -129,6 +156,11 @@ interface ApiService {
     suspend fun deleteGlobalNote(
         @Path("noteId") noteId: Long
     ): Response<Void>
+
+    @POST("notes/bulk-delete")
+    suspend fun bulkDeleteGlobalNotes(
+        @Body request: BulkDeleteNotesRequest
+    ): Response<BulkDeleteResponse>
 
     // ============================================================
     // FINANCIAL MOVEMENTS
@@ -151,6 +183,11 @@ interface ApiService {
 
     @DELETE("financial-movements/{movementId}")
     suspend fun deleteFinancialMovement(@Path("movementId") movementId: Long): Response<Void>
+
+    @POST("financial-movements/bulk-delete")
+    suspend fun bulkDeleteFinancialMovements(
+        @Body request: BulkDeleteMovementsRequest
+    ): Response<BulkDeleteResponse>
 
     @PATCH("financial-movements/{movementId}/verify")
     suspend fun verifyFinancialMovement(
@@ -179,6 +216,17 @@ interface ApiService {
 
     @PATCH("notifications/{notificationId}/read")
     suspend fun markAsRead(@Path("notificationId") notificationId: Long): Response<NotificationResponse>
+
+    @PATCH("notifications/read-all")
+    suspend fun markAllAsRead(): Response<Void>
+
+    @DELETE("notifications/{notificationId}")
+    suspend fun deleteNotification(@Path("notificationId") notificationId: Long): Response<Void>
+
+    @POST("notifications/bulk-delete")
+    suspend fun bulkDeleteNotifications(
+        @Body request: BulkDeleteNotificationsRequest
+    ): Response<BulkDeleteResponse>
 
     @GET("notifications/recipient/{recipientId}/unread-count")
     suspend fun getUnreadCount(@Path("recipientId") recipientId: Long): Response<UnreadCountResponse>

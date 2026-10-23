@@ -52,7 +52,9 @@ function isRead(notification) {
 
 function Notifications() {
   const [notifications, setNotifications] = useState([]);
+  const [selectedNotificationIds, setSelectedNotificationIds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [socketState, setSocketState] = useState(
@@ -155,6 +157,74 @@ function Notifications() {
     }
   }
 
+  function handleToggleSelectNotification(id, event) {
+    event.stopPropagation();
+    setSelectedNotificationIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function handleSelectAllNotifications() {
+    if (selectedNotificationIds.length === notifications.length) {
+      setSelectedNotificationIds([]);
+    } else {
+      setSelectedNotificationIds(notifications.map((n) => n.id));
+    }
+  }
+
+  async function handleDeleteNotification(id) {
+    if (!window.confirm("Delete this notification?")) return;
+    try {
+      setDeleting(true);
+      setMessage("");
+      setError("");
+      await api.delete(`/notifications/${id}`);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setSelectedNotificationIds((prev) => prev.filter((item) => item !== id));
+      setMessage("Notification deleted.");
+    } catch (requestError) {
+      console.error("Delete notification error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to delete notification."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleBulkDeleteNotifications() {
+    if (selectedNotificationIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedNotificationIds.length} selected notification(s)?`
+      )
+    ) {
+      return;
+    }
+    try {
+      setDeleting(true);
+      setMessage("");
+      setError("");
+      await api.post("/notifications/bulk-delete", {
+        notificationIds: selectedNotificationIds,
+      });
+      setNotifications((prev) =>
+        prev.filter((n) => !selectedNotificationIds.includes(n.id))
+      );
+      setMessage(
+        `Successfully deleted ${selectedNotificationIds.length} notification(s).`
+      );
+      setSelectedNotificationIds([]);
+    } catch (requestError) {
+      console.error("Bulk delete notifications error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to delete notifications."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -162,6 +232,7 @@ function Notifications() {
         title="Notifications"
         description="Stay close to activity from every family member."
         action={<span className="count-label">{unreadCount} unread</span>}
+        theme="notifications"
       />
       <div className={`connection-strip connection-${socketState}`}>
         <span className="online-dot" />
@@ -199,41 +270,139 @@ function Notifications() {
       )}
 
       {!error && !loading && notifications.length > 0 && (
-        <section className="notification-list">
-          {notifications.map((notification) => {
-            const read = isRead(notification);
-            return (
-              <article
-                className={`notification-card ${
-                  read ? "notification-read" : "notification-unread"
-                }`}
-                key={notification.id}
-              >
-                <div className="notification-indicator" aria-hidden="true" />
-                <div className="notification-content">
-                  <div className="notification-topline">
-                    <StatusBadge value={read ? "READ" : "UNREAD"} />
-                    <span className="notification-type">
-                      {notification.notification_type}
-                    </span>
-                    <time>{formatDate(notification.created_at)}</time>
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "1rem",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={
+                  selectedNotificationIds.length > 0 &&
+                  selectedNotificationIds.length === notifications.length
+                }
+                onChange={handleSelectAllNotifications}
+                aria-label="Select all notifications"
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Select all notifications</span>
+            </label>
+          </div>
+
+          {selectedNotificationIds.length > 0 && (
+            <div
+              className="bulk-action-bar"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "0.6rem 1rem",
+                marginBottom: "1rem",
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "8px",
+              }}
+            >
+              <span>
+                <strong>{selectedNotificationIds.length}</strong> notification(s) selected
+              </span>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="button button-danger"
+                  style={{
+                    backgroundColor: "#ef4444",
+                    color: "#fff",
+                    border: "none",
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                  onClick={handleBulkDeleteNotifications}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting..." : `Delete Selected (${selectedNotificationIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  style={{ padding: "0.4rem 0.8rem", borderRadius: "6px" }}
+                  onClick={() => setSelectedNotificationIds([])}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          <section className="notification-list">
+            {notifications.map((notification) => {
+              const read = isRead(notification);
+              const isSelected = selectedNotificationIds.includes(notification.id);
+              return (
+                <article
+                  className={`notification-card ${
+                    read ? "notification-read" : "notification-unread"
+                  } ${isSelected ? "notification-selected" : ""}`}
+                  key={notification.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    border: isSelected ? "1px solid rgba(239, 68, 68, 0.5)" : undefined,
+                  }}
+                >
+                  <div style={{ padding: "1.25rem 0.5rem 0 1rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleToggleSelectNotification(notification.id, e)}
+                      aria-label={`Select notification ${notification.title}`}
+                      style={{ cursor: "pointer", width: "18px", height: "18px" }}
+                    />
                   </div>
-                  <h2>{notification.title}</h2>
-                  <p>{notification.message}</p>
-                  {!read && (
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => markAsRead(notification.id)}
-                    >
-                      Mark as read
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </section>
+                  <div className="notification-indicator" aria-hidden="true" />
+                  <div className="notification-content" style={{ flex: 1 }}>
+                    <div className="notification-topline">
+                      <StatusBadge value={read ? "READ" : "UNREAD"} />
+                      <span className="notification-type">
+                        {notification.notification_type}
+                      </span>
+                      <time>{formatDate(notification.created_at)}</time>
+                    </div>
+                    <h2>{notification.title}</h2>
+                    <p>{notification.message}</p>
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      {!read && (
+                        <button
+                          className="button-secondary"
+                          type="button"
+                          onClick={() => markAsRead(notification.id)}
+                        >
+                          Mark as read
+                        </button>
+                      )}
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        style={{ color: "#ef4444" }}
+                        onClick={() => handleDeleteNotification(notification.id)}
+                        disabled={deleting}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        </>
       )}
     </div>
   );

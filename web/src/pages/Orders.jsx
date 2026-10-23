@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import FeedbackState from "../components/FeedbackState";
@@ -18,6 +18,7 @@ function Orders() {
   const [description, setDescription] = useState("");
   const [editingOrder, setEditingOrder] = useState(null);
   const [openMenuOrderId, setOpenMenuOrderId] = useState(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState("");
   const [busyOrderId, setBusyOrderId] = useState(null);
   const [search, setSearch] = useState("");
@@ -200,6 +201,58 @@ function Orders() {
     }
   }
 
+  function handleToggleSelectOrder(id, event) {
+    event.stopPropagation();
+    setSelectedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function handleSelectAllOrders() {
+    if (selectedOrderIds.length === filteredOrders.length) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(filteredOrders.map((o) => o.id));
+    }
+  }
+
+  async function handleBulkDeleteOrders() {
+    if (selectedOrderIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedOrderIds.length} selected order(s)? Orders linked to financial records will be preserved for accounting audit integrity.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setActionMessage("");
+      setActionError("");
+      const response = await api.post("/orders/bulk-delete", {
+        orderIds: selectedOrderIds,
+      });
+      const data = response.data?.data;
+      if (data?.skipped?.length > 0) {
+        setActionMessage(
+          `Deleted ${data.deletedCount} order(s). ${data.skipped.length} order(s) skipped due to associated financial transactions.`
+        );
+      } else {
+        setActionMessage(`Successfully deleted ${data.deletedCount} order(s).`);
+      }
+      setSelectedOrderIds([]);
+      await loadOrders();
+    } catch (requestError) {
+      console.error("Bulk delete orders error:", requestError);
+      setActionError(
+        requestError.response?.data?.message || "Failed to delete orders."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function startEditingOrder(order) {
     flushOrderEdit();
     const nextEdit = {
@@ -217,24 +270,23 @@ function Orders() {
     setOpenMenuOrderId(null);
   }
 
-  const filteredOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
-      if (!query) return true;
-      return [
-        order.title,
-        order.order_number,
-        order.customer_name,
-        order.full_name,
-        order.description,
-        order.taken_by_name,
-      ].some((value) =>
-        String(value || "")
-          .toLowerCase()
-          .includes(query)
-      );
-    });
-  }, [orders, search]);
+  const query = search.trim().toLowerCase();
+  const filteredOrders = query
+    ? orders.filter((order) =>
+        [
+          order.title,
+          order.order_number,
+          order.customer_name,
+          order.full_name,
+          order.description,
+          order.taken_by_name,
+        ].some((value) =>
+          String(value || "")
+            .toLowerCase()
+            .includes(query)
+        )
+      )
+    : orders;
 
   return (
     <div className="page-stack">
@@ -243,6 +295,7 @@ function Orders() {
         title="Orders"
         description="Create and keep track of shared work in one simple list."
         action={<span className="count-label">{orders.length} total</span>}
+        theme="orders"
       />
 
       <section className="panel">
@@ -296,9 +349,21 @@ function Orders() {
 
       <section className="panel">
         <div className="section-heading">
-          <div>
-            <p className="eyebrow">Shared queue</p>
-            <h2>All orders</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {filteredOrders.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedOrderIds.length > 0 && selectedOrderIds.length === filteredOrders.length}
+                onChange={handleSelectAllOrders}
+                aria-label="Select all orders"
+                title="Select all orders"
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+            )}
+            <div>
+              <p className="eyebrow">Shared queue</p>
+              <h2>All orders</h2>
+            </div>
           </div>
           <input
             className="search-input"
@@ -308,6 +373,53 @@ function Orders() {
             aria-label="Search orders"
           />
         </div>
+
+        {selectedOrderIds.length > 0 && (
+          <div
+            className="bulk-action-bar"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "0.6rem 1rem",
+              marginBottom: "1rem",
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "8px",
+            }}
+          >
+            <span>
+              <strong>{selectedOrderIds.length}</strong> order(s) selected
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="button button-danger"
+                style={{
+                  backgroundColor: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.4rem 0.8rem",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                onClick={handleBulkDeleteOrders}
+                disabled={submitting}
+              >
+                {submitting ? "Deleting..." : `Delete Selected (${selectedOrderIds.length})`}
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                style={{ padding: "0.4rem 0.8rem", borderRadius: "6px" }}
+                onClick={() => setSelectedOrderIds([])}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
 
         {actionMessage && <p className="alert alert-success">{actionMessage}</p>}
         {actionError && <p className="alert alert-error">{actionError}</p>}
@@ -336,8 +448,16 @@ function Orders() {
           />
         ) : (
           <div className="orders-notepad" ref={ordersList}>
-            {filteredOrders.map((order) => (
-              <article className="order-note" key={order.id}>
+            {filteredOrders.map((order) => {
+              const isSelected = selectedOrderIds.includes(order.id);
+              return (
+              <article
+                className={`order-note ${isSelected ? "order-note-selected" : ""}`}
+                key={order.id}
+                style={{
+                  border: isSelected ? "1px solid rgba(239, 68, 68, 0.5)" : undefined,
+                }}
+              >
                 {editingOrder?.id === order.id ? (
                   <div className="order-edit-form">
                     <label>
@@ -379,8 +499,15 @@ function Orders() {
                   </div>
                 ) : (
                   <>
-                    <div className="order-note-heading">
-                      <h3>
+                    <div className="order-note-heading" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => handleToggleSelectOrder(order.id, e)}
+                        aria-label={`Select order ${order.title || order.order_number || order.id}`}
+                        style={{ cursor: "pointer", width: "18px", height: "18px", flexShrink: 0 }}
+                      />
+                      <h3 style={{ flex: 1, margin: 0 }}>
                         <Link to={`/orders/${order.id}`}>
                           {order.title ||
                             order.order_number ||
@@ -428,7 +555,8 @@ function Orders() {
                   </>
                 )}
               </article>
-            ))}
+            );
+          })}
           </div>
         )}
       </section>

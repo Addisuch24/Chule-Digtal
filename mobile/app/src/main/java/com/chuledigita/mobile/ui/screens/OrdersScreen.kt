@@ -32,6 +32,10 @@ import com.chuledigita.mobile.domain.model.Order
 import com.chuledigita.mobile.domain.model.OrderStatus
 import com.chuledigita.mobile.ui.components.ConfirmDialog
 import com.chuledigita.mobile.ui.components.MainScaffold
+import com.chuledigita.mobile.ui.components.MultiSelectActionBar
+import com.chuledigita.mobile.ui.components.MultiSelectDeleteConfirmationDialog
+import com.chuledigita.mobile.ui.components.OrdersHeaderIllustration
+import com.chuledigita.mobile.ui.components.ScreenHeaderBanner
 import com.chuledigita.mobile.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +45,16 @@ fun OrdersScreen(
     viewModel: OrdersViewModel = viewModel(factory = OrdersViewModel.Factory)
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val successState = uiState as? OrdersUiState.Success
+    LaunchedEffect(successState?.successMessage, successState?.errorMessage) {
+        val msg = successState?.successMessage ?: successState?.errorMessage
+        if (msg != null) {
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearMessage()
+        }
+    }
 
     MainScaffold(
         navController = navController,
@@ -101,10 +115,19 @@ fun OrdersScreen(
                         onStartEditing = viewModel::startEditing,
                         onCancelEditing = viewModel::cancelEditing,
                         onSearch = viewModel::onSearchQueryChanged,
-                        onClearMessage = viewModel::clearMessage
+                        onClearMessage = viewModel::clearMessage,
+                        onToggleSelectOrder = viewModel::toggleSelectOrder,
+                        onSelectAllOrders = viewModel::selectAllOrders,
+                        onClearSelection = viewModel::clearOrderSelection,
+                        onBulkDeleteSelected = viewModel::bulkDeleteSelectedOrders
                     )
                 }
             }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }
@@ -119,10 +142,15 @@ private fun OrdersContent(
     onStartEditing: (Order) -> Unit,
     onCancelEditing: () -> Unit,
     onSearch: (String) -> Unit,
-    onClearMessage: () -> Unit
+    onClearMessage: () -> Unit,
+    onToggleSelectOrder: (String) -> Unit,
+    onSelectAllOrders: (List<String>) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkDeleteSelected: (((Int, Int, String) -> Unit)?) -> Unit
 ) {
     var orderToDelete by remember { mutableStateOf<Order?>(null) }
     var selectedOrder by remember { mutableStateOf<Order?>(null) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -260,6 +288,16 @@ private fun OrdersContent(
                         )
                     }
 
+                    MultiSelectActionBar(
+                        selectedCount = state.selectedOrderIds.size,
+                        totalCount = state.orders.size,
+                        isDeleting = state.isDeletingBatch,
+                        onSelectAll = { onSelectAllOrders(state.orders.map { it.id }) },
+                        onClearSelection = onClearSelection,
+                        onDeleteSelected = { showBulkDeleteDialog = true },
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
                     if (state.orders.isEmpty()) {
                         Box(
                             modifier = Modifier
@@ -281,7 +319,10 @@ private fun OrdersContent(
                                     onClick = { selectedOrder = order },
                                     onEdit = { onStartEditing(order) },
                                     onStatusChange = { newStatus -> onUpdateStatus(order.id, newStatus) },
-                                    onDelete = { orderToDelete = order }
+                                    onDelete = { orderToDelete = order },
+                                    isSelected = state.selectedOrderIds.contains(order.id),
+                                    isSelectionActive = state.selectedOrderIds.isNotEmpty(),
+                                    onToggleSelect = { onToggleSelectOrder(order.id) }
                                 )
                             }
                         }
@@ -293,6 +334,26 @@ private fun OrdersContent(
         item {
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Multi-select bulk delete confirmation dialog
+    if (showBulkDeleteDialog) {
+        MultiSelectDeleteConfirmationDialog(
+            itemType = "order",
+            selectedCount = state.selectedOrderIds.size,
+            warningMessage = "ትዕዛዞች ከፋይናንስ እንቅስቃሴ ጋር የተያያዙ ከሆኑ ለሂሳብ ኦዲት ደህንነት ሲባል ሊጠበቁ ይችላሉ። (Orders linked to financial movements will be preserved for accounting audit integrity).",
+            isDeleting = state.isDeletingBatch,
+            onConfirm = {
+                onBulkDeleteSelected { _, _, _ ->
+                    showBulkDeleteDialog = false
+                }
+            },
+            onDismiss = {
+                if (!state.isDeletingBatch) {
+                    showBulkDeleteDialog = false
+                }
+            }
+        )
     }
 
     // Selected Order Notepad Reader Dialog
@@ -323,39 +384,13 @@ private fun OrdersContent(
 
 @Composable
 private fun OrdersHeader(totalCount: Int) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "ትዕዛዞች",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = BrandGreen
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "የተደረጉ ስራዎችን እና ትዕዛዞችን በአንድ ላይ ይከታተሉ።",
-                style = MaterialTheme.typography.bodyMedium,
-                color = BrandGreen.copy(alpha = 0.6f)
-            )
+    ScreenHeaderBanner(
+        title = "Orders",
+        subtitle = "Track and manage your orders efficiently.",
+        illustration = {
+            OrdersHeaderIllustration()
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Surface(
-            color = Color(0xFFE2F0F9),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text(
-                text = "$totalCount ትዕዛዞች",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2980B9)
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -379,8 +414,8 @@ private fun CreateOrderCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.08f)),
+        color = PureWhiteSurface,
+        border = BorderStroke(1.dp, BorderDivider),
         shadowElevation = 2.dp
     ) {
         Column(
@@ -421,7 +456,8 @@ private fun CreateOrderCard(
                 Text(
                     text = "የትዕዛዝ ርዕስ (ስም)",
                     style = MaterialTheme.typography.labelMedium,
-                    color = BrandGreen.copy(alpha = 0.7f)
+                    color = BrandNavy,
+                    fontWeight = FontWeight.SemiBold
                 )
                 OutlinedTextField(
                     value = title,
@@ -430,17 +466,19 @@ private fun CreateOrderCard(
                     placeholder = {
                         Text(
                             "የስራውን ወይም የእቃውን ስም ይጻፉ",
-                            color = BrandGreen.copy(alpha = 0.35f),
+                            color = TextSecondary.copy(alpha = 0.5f),
                             fontSize = 14.sp
                         )
                     },
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandGreen,
-                        unfocusedBorderColor = BrandGreen.copy(alpha = 0.2f),
-                        focusedContainerColor = CreamSurface,
-                        unfocusedContainerColor = CreamSurface,
-                        cursorColor = BrandGreen
+                        focusedBorderColor = EmeraldGreen,
+                        unfocusedBorderColor = BorderDivider,
+                        focusedContainerColor = OffWhiteBg,
+                        unfocusedContainerColor = OffWhiteBg,
+                        cursorColor = EmeraldGreen,
+                        focusedTextColor = BrandNavy,
+                        unfocusedTextColor = BrandNavy
                     ),
                     singleLine = true
                 )
@@ -451,28 +489,31 @@ private fun CreateOrderCard(
                 Text(
                     text = "ዝርዝር መግለጫ",
                     style = MaterialTheme.typography.labelMedium,
-                    color = BrandGreen.copy(alpha = 0.7f)
+                    color = BrandNavy,
+                    fontWeight = FontWeight.SemiBold
                 )
                 OutlinedTextField(
                     value = details,
                     onValueChange = { details = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 110.dp),
+                        .heightIn(min = 100.dp),
                     placeholder = {
                         Text(
                             "ለምሳሌ፦ 24 ደብተሮች እና ወደ ቦሌ ማድረስ",
-                            color = BrandGreen.copy(alpha = 0.35f),
+                            color = TextSecondary.copy(alpha = 0.5f),
                             fontSize = 14.sp
                         )
                     },
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandGreen,
-                        unfocusedBorderColor = BrandGreen.copy(alpha = 0.2f),
-                        focusedContainerColor = CreamSurface,
-                        unfocusedContainerColor = CreamSurface,
-                        cursorColor = BrandGreen
+                        focusedBorderColor = EmeraldGreen,
+                        unfocusedBorderColor = BorderDivider,
+                        focusedContainerColor = OffWhiteBg,
+                        unfocusedContainerColor = OffWhiteBg,
+                        cursorColor = EmeraldGreen,
+                        focusedTextColor = BrandNavy,
+                        unfocusedTextColor = BrandNavy
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
                 )
@@ -488,9 +529,9 @@ private fun CreateOrderCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2C5E6B),
+                    containerColor = EmeraldGreen,
                     contentColor = Color.White
                 )
             ) {
@@ -504,7 +545,7 @@ private fun CreateOrderCard(
                     Text(
                         text = if (editingOrder != null) "ለውጥ አስቀምጥ" else "ትዕዛዝ መዝግብ",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        fontSize = 15.sp
                     )
                 }
             }
@@ -518,7 +559,10 @@ private fun OrderCardItem(
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onStatusChange: (OrderStatus) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionActive: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val isCompleted = order.status == OrderStatus.COMPLETED
@@ -526,10 +570,19 @@ private fun OrderCardItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = if (isCompleted) CreamSurface.copy(alpha = 0.6f) else CreamSurface,
-        border = BorderStroke(1.dp, if (isCompleted) ErrorColor.copy(alpha = 0.2f) else BrandGreen.copy(alpha = 0.06f)),
+            .clickable(onClick = {
+                if (isSelectionActive && onToggleSelect != null) {
+                    onToggleSelect()
+                } else {
+                    onClick()
+                }
+            }),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) LightMint.copy(alpha = 0.5f) else PureWhiteSurface,
+        border = BorderStroke(
+            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) EmeraldGreen else BorderDivider
+        ),
         shadowElevation = 1.dp
     ) {
         Column(
@@ -541,13 +594,23 @@ private fun OrderCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (onToggleSelect != null) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = EmeraldGreen,
+                            uncheckedColor = TextSecondary.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
-                    // Pending: Bolded. Completed: Unbolded, faded with red color.
                     Text(
                         text = order.title ?: order.orderNumber,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = if (isCompleted) FontWeight.Normal else FontWeight.Bold,
-                        color = if (isCompleted) ErrorColor.copy(alpha = 0.7f) else BrandGreen,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandNavy,
                         textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -556,11 +619,11 @@ private fun OrderCardItem(
                     Text(
                         text = order.customerName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isCompleted) ErrorColor.copy(alpha = 0.5f) else BrandGreen.copy(alpha = 0.7f),
+                        color = TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -569,22 +632,20 @@ private fun OrderCardItem(
                         Text(
                             text = order.orderNumber,
                             style = MaterialTheme.typography.labelSmall,
-                            color = BrandGold,
+                            color = BrandNavy,
                             fontWeight = FontWeight.Bold
                         )
-                        if (isCompleted) {
-                            Surface(
-                                color = ErrorColor.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "ተጠናቋል (Completed)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ErrorColor,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                        Surface(
+                            color = if (isCompleted) LightMint else Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (isCompleted) "ተጠናቋል (Completed)" else "በመጠባበቅ ላይ (Pending)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isCompleted) EmeraldGreen else WarningColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
                     }
                 }
@@ -595,7 +656,7 @@ private fun OrderCardItem(
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "አማራጮች",
-                            tint = BrandGreen.copy(alpha = 0.5f),
+                            tint = TextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }

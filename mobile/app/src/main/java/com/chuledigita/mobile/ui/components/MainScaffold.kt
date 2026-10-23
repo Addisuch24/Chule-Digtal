@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.chuledigita.mobile.ui.navigation.Screen
+import com.chuledigita.mobile.ui.theme.*
 
 /**
  * Represents a navigation item in the bottom navigation bar.
@@ -60,94 +61,120 @@ fun MainScaffold(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { 
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    ) 
-                },
-                navigationIcon = {
-                    if (navController.previousBackStackEntry != null && !showBottomBar) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Surface(
+                color = PureWhiteSurface,
+                shadowElevation = 0.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderDivider.copy(alpha = 0.6f))
+            ) {
+                CenterAlignedTopAppBar(
+                    title = { 
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandNavy
+                        ) 
+                    },
+                    navigationIcon = {
+                        if (navController.previousBackStackEntry != null && !showBottomBar) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = BrandNavy)
+                            }
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
-                        Icon(
-                            imageVector = if (currentRoute == Screen.Notifications.route) Icons.Filled.Notifications else Icons.Outlined.Notifications,
-                            contentDescription = "Notifications"
-                        )
-                    }
-                    IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
-                        Icon(
-                            imageVector = if (currentRoute == Screen.Profile.route) Icons.Filled.AccountCircle else Icons.Outlined.AccountCircle,
-                            contentDescription = "Profile"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    },
+                    actions = {
+                        IconButton(onClick = { navController.navigate(Screen.Notifications.route) }) {
+                            Icon(
+                                imageVector = if (currentRoute == Screen.Notifications.route) Icons.Filled.Notifications else Icons.Outlined.Notifications,
+                                contentDescription = "Notifications",
+                                tint = if (currentRoute == Screen.Notifications.route) EmeraldGreen else BrandNavy
+                            )
+                        }
+                        IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                            Icon(
+                                imageVector = if (currentRoute == Screen.Profile.route) Icons.Filled.AccountCircle else Icons.Outlined.AccountCircle,
+                                contentDescription = "Profile",
+                                tint = if (currentRoute == Screen.Profile.route) EmeraldGreen else BrandNavy
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = PureWhiteSurface,
+                        titleContentColor = BrandNavy,
+                    )
                 )
-            )
+            }
         },
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(
-                    tonalElevation = 8.dp,
-                    containerColor = MaterialTheme.colorScheme.surface
+                Surface(
+                    color = PureWhiteSurface,
+                    shadowElevation = 8.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderDivider)
                 ) {
-                    val items = listOf(
-                        AppNavigationItem(Screen.Dashboard, Icons.Filled.Dashboard, Icons.Outlined.Dashboard, "Dashboard"),
-                        AppNavigationItem(Screen.Notes, Icons.AutoMirrored.Filled.Notes, Icons.AutoMirrored.Outlined.Notes, "Notes"),
-                        AppNavigationItem(Screen.Orders, Icons.Filled.Receipt, Icons.Outlined.Receipt, "Orders"),
-                        AppNavigationItem(Screen.Finance, Icons.Filled.Payments, Icons.Outlined.Payments, "Finance")
-                    )
+                    NavigationBar(
+                        tonalElevation = 0.dp,
+                        containerColor = PureWhiteSurface,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val items = listOf(
+                            AppNavigationItem(Screen.Dashboard, Icons.Filled.Home, Icons.Outlined.Home, "Dashboard"),
+                            AppNavigationItem(Screen.Notes, Icons.AutoMirrored.Filled.Notes, Icons.AutoMirrored.Outlined.Notes, "Notes"),
+                            AppNavigationItem(Screen.Orders, Icons.Filled.ShoppingBag, Icons.Outlined.ShoppingBag, "Orders"),
+                            AppNavigationItem(Screen.Finance, Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "Finance"),
+                            AppNavigationItem(Screen.Profile, Icons.Filled.GridView, Icons.Outlined.GridView, "More")
+                        )
 
-                    items.forEach { item ->
-                        val isSelected = currentRoute == item.screen.route
-                        NavigationBarItem(
-                            icon = { 
-                                when (val icon = if (isSelected) item.filledIcon else item.outlinedIcon) {
-                                    is ImageVector -> Icon(imageVector = icon, contentDescription = item.label)
-                                    is Int -> Icon(
-                                        painter = painterResource(id = icon), 
-                                        contentDescription = item.label,
-                                        tint = if (item.label == "Notes") Color.Unspecified else LocalContentColor.current
-                                    )
-                                }
-                            },
-                            label = { 
-                                val localizedLabel = when(item.label) {
-                                    "Dashboard" -> "ዳሽቦርድ"
-                                    "Notes" -> "ማስታወሻዎች"
-                                    "Orders" -> "ትዕዛዞች"
-                                    "Finance" -> "ፋይናንስ"
-                                    else -> item.label
-                                }
-                                Text(
-                                    text = localizedLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                ) 
-                            },
-                            selected = isSelected,
-                            onClick = {
-                                if (!isSelected) {
-                                    navController.navigate(item.screen.route) {
-                                        popUpTo(Screen.Dashboard.route) {
-                                            saveState = true
+                        items.forEach { item ->
+                            val isSelected = currentRoute == item.screen.route
+                            NavigationBarItem(
+                                icon = { 
+                                    when (val icon = if (isSelected) item.filledIcon else item.outlinedIcon) {
+                                        is ImageVector -> Icon(imageVector = icon, contentDescription = item.label)
+                                        is Int -> Icon(
+                                            painter = painterResource(id = icon), 
+                                            contentDescription = item.label,
+                                            tint = if (item.label == "Notes") Color.Unspecified else LocalContentColor.current
+                                        )
+                                        else -> {}
+                                    }
+                                },
+                                label = { 
+                                    val localizedLabel = when(item.label) {
+                                        "Dashboard" -> "ዳሽቦርድ"
+                                        "Notes" -> "ማስታወሻዎች"
+                                        "Orders" -> "ትዕዛዞች"
+                                        "Finance" -> "ፋይናንስ"
+                                        "More" -> "ተጨማሪ"
+                                        else -> item.label
+                                    }
+                                    Text(
+                                        text = localizedLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    ) 
+                                },
+                                selected = isSelected,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = EmeraldGreen,
+                                    selectedTextColor = EmeraldGreen,
+                                    indicatorColor = LightMint,
+                                    unselectedIconColor = TextSecondary,
+                                    unselectedTextColor = TextSecondary
+                                ),
+                                onClick = {
+                                    if (!isSelected) {
+                                        navController.navigate(item.screen.route) {
+                                            popUpTo(Screen.Dashboard.route) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -156,7 +183,7 @@ fun MainScaffold(
         content = { padding ->
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
+                color = OffWhiteBg
             ) {
                 content(padding)
             }

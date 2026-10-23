@@ -13,14 +13,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 /**
- * ViewModel managing the global shared family-business notes connected to mock/real backend API.
+ * ViewModel managing the global shared family-business notes connected to real backend API.
  */
 class NotesViewModel(
-    private val _noteRepository: NoteRepository
+    private val _noteRepository: NoteRepository,
+    private val externalScope: kotlinx.coroutines.CoroutineScope? = null
 ) : ViewModel() {
+
+    private val scope: kotlinx.coroutines.CoroutineScope get() = externalScope ?: viewModelScope
 
     private val _uiState = MutableStateFlow<NotesUiState>(NotesUiState.Loading)
     val uiState: StateFlow<NotesUiState> = _uiState.asStateFlow()
@@ -33,25 +35,20 @@ class NotesViewModel(
     }
 
     /**
-     * Loads global notes (mock sample data for UI design mode).
+     * Loads global notes from backend API repository.
      */
     fun loadNotes() {
-        viewModelScope.launch {
+        scope.launch {
             _uiState.value = NotesUiState.Loading
-            kotlinx.coroutines.delay(150)
-
-            // UI Design mode: Load sample mock note matching reference screenshot
-            allNotes = listOf(
-                CustomerNote(
-                    id = "n1",
-                    customerId = "c1",
-                    note = "sdfhmnh\nghty hjty h",
-                    date = "Oct 11, 2026",
-                    time = "11:37 PM",
-                    authorName = "Sode"
+            val result = _noteRepository.getGlobalNotes()
+            if (result.isSuccess) {
+                allNotes = result.getOrNull() ?: emptyList()
+                updateState()
+            } else {
+                _uiState.value = NotesUiState.Error(
+                    result.exceptionOrNull()?.message ?: "ማስታወሻዎችን መጫን አልተቻለም።"
                 )
-            )
-            updateState()
+            }
         }
     }
 
@@ -60,7 +57,11 @@ class NotesViewModel(
         errorMsg: String? = null,
         editing: CustomerNote? = null,
         selected: CustomerNote? = null,
-        submitting: Boolean = false
+        submitting: Boolean = false,
+        selectedIds: Set<String>? = null,
+        deletingBatch: Boolean = false,
+        batchMsg: String? = null,
+        batchErr: String? = null
     ) {
         if (allNotes.isEmpty() && currentSearchQuery.isBlank()) {
             _uiState.value = NotesUiState.Empty
@@ -76,15 +77,22 @@ class NotesViewModel(
             }
         }
 
+        val currentSuccess = _uiState.value as? NotesUiState.Success
+        val currentIds = selectedIds ?: currentSuccess?.selectedNoteIds ?: emptySet()
+
         _uiState.value = NotesUiState.Success(
             notes = allNotes,
             filteredNotes = filtered,
             searchQuery = currentSearchQuery,
             editingNote = editing,
             selectedNote = selected,
+            selectedNoteIds = currentIds,
             isSubmitting = submitting,
+            isDeletingBatch = deletingBatch,
             successMessage = successMsg,
-            errorMessage = errorMsg
+            errorMessage = errorMsg,
+            batchDeleteMessage = batchMsg,
+            batchDeleteError = batchErr
         )
     }
 
@@ -96,7 +104,8 @@ class NotesViewModel(
                 successMsg = currentState.successMessage,
                 errorMsg = currentState.errorMessage,
                 editing = currentState.editingNote,
-                selected = currentState.selectedNote
+                selected = currentState.selectedNote,
+                selectedIds = currentState.selectedNoteIds
             )
         } else if (currentState is NotesUiState.Empty && query.isNotBlank()) {
             updateState()
@@ -104,69 +113,73 @@ class NotesViewModel(
     }
 
     /**
-     * Creates a new shared note automatically without distractions.
+     * Creates a new shared note via backend API.
      */
     fun addNote(content: String) {
         if (content.isBlank()) return
-        viewModelScope.launch {
+        scope.launch {
             setSubmitting(true)
-            kotlinx.coroutines.delay(100)
-
-            val newNote = CustomerNote(
-                id = UUID.randomUUID().toString(),
-                customerId = "c1",
-                note = content.trim(),
-                date = "Oct 11, 2026",
-                time = "12:00 PM",
-                authorName = "አስተዳዳሪ"
-            )
-            allNotes = listOf(newNote) + allNotes
-            updateState(
-                successMsg = null, // Saved silently without distractions
-                selected = null
-            )
+            val result = _noteRepository.createGlobalNote(content.trim())
+            if (result.isSuccess) {
+                val newNote = result.getOrNull()
+                if (newNote != null) {
+                    allNotes = listOf(newNote) + allNotes
+                } else {
+                    loadNotes()
+                }
+                updateState(selected = null)
+            } else {
+                setSubmitting(false)
+                updateState(errorMsg = result.exceptionOrNull()?.message)
+            }
         }
     }
 
     /**
-     * Updates an existing note automatically without distractions.
+     * Updates an existing note via backend API.
      */
     fun updateNote(noteId: String, content: String) {
         if (content.isBlank()) return
-        viewModelScope.launch {
+        scope.launch {
             setSubmitting(true)
-            kotlinx.coroutines.delay(100)
-
-            allNotes = allNotes.map { note ->
-                if (note.id == noteId) note.copy(note = content.trim()) else note
+            val result = _noteRepository.updateGlobalNote(noteId, content.trim())
+            if (result.isSuccess) {
+                val updated = result.getOrNull()
+                if (updated != null) {
+                    allNotes = allNotes.map { if (it.id == noteId) updated else it }
+                } else {
+                    loadNotes()
+                }
+                updateState(editing = null, selected = null)
+            } else {
+                setSubmitting(false)
+                updateState(errorMsg = result.exceptionOrNull()?.message)
             }
-            updateState(
-                successMsg = null, // Saved silently without distractions
-                editing = null,
-                selected = null
-            )
         }
     }
 
     /**
-     * Deletes a note.
+     * Deletes a note via backend API.
      */
     fun deleteNote(noteId: String) {
-        viewModelScope.launch {
-            allNotes = allNotes.filter { it.id != noteId }
-            val currentState = _uiState.value as? NotesUiState.Success
-            val nextSelected = if (currentState?.selectedNote?.id == noteId) null else currentState?.selectedNote
-            val nextEditing = if (currentState?.editingNote?.id == noteId) null else currentState?.editingNote
-            updateState(
-                successMsg = null,
-                editing = nextEditing,
-                selected = nextSelected
-            )
+        scope.launch {
+            val result = _noteRepository.deleteGlobalNote(noteId)
+            if (result.isSuccess) {
+                allNotes = allNotes.filter { it.id != noteId }
+                val currentState = _uiState.value as? NotesUiState.Success
+                val nextSelected = if (currentState?.selectedNote?.id == noteId) null else currentState?.selectedNote
+                val nextEditing = if (currentState?.editingNote?.id == noteId) null else currentState?.editingNote
+                updateState(
+                    editing = nextEditing,
+                    selected = nextSelected
+                )
+            } else {
+                updateState(errorMsg = result.exceptionOrNull()?.message)
+            }
         }
     }
 
     fun startEditing(note: CustomerNote) {
-        val currentState = _uiState.value as? NotesUiState.Success
         updateState(
             editing = note,
             selected = null
@@ -190,10 +203,95 @@ class NotesViewModel(
         if (currentState != null) {
             updateState(
                 editing = currentState.editingNote,
-                selected = currentState.selectedNote
+                selected = currentState.selectedNote,
+                selectedIds = currentState.selectedNoteIds
             )
         }
     }
+
+    fun toggleSelectNote(noteId: String) {
+        val currentState = _uiState.value as? NotesUiState.Success ?: return
+        val updated = if (currentState.selectedNoteIds.contains(noteId)) {
+            currentState.selectedNoteIds - noteId
+        } else {
+            currentState.selectedNoteIds + noteId
+        }
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingNote,
+            selected = currentState.selectedNote,
+            submitting = currentState.isSubmitting,
+            selectedIds = updated
+        )
+    }
+
+    fun selectAllNotes(visibleIds: List<String>) {
+        val currentState = _uiState.value as? NotesUiState.Success ?: return
+        val allSelected = visibleIds.isNotEmpty() && currentState.selectedNoteIds.containsAll(visibleIds)
+        val updated = if (allSelected) emptySet() else visibleIds.toSet()
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingNote,
+            selected = currentState.selectedNote,
+            submitting = currentState.isSubmitting,
+            selectedIds = updated
+        )
+    }
+
+    fun clearNoteSelection() {
+        val currentState = _uiState.value as? NotesUiState.Success ?: return
+        updateState(
+            successMsg = currentState.successMessage,
+            errorMsg = currentState.errorMessage,
+            editing = currentState.editingNote,
+            selected = currentState.selectedNote,
+            submitting = currentState.isSubmitting,
+            selectedIds = emptySet()
+        )
+    }
+
+    fun bulkDeleteSelectedNotes(onComplete: ((deletedCount: Int, message: String) -> Unit)? = null) {
+        val currentState = _uiState.value as? NotesUiState.Success ?: return
+        val idsToDelete = currentState.selectedNoteIds.toList()
+        if (idsToDelete.isEmpty() || currentState.isDeletingBatch) return
+
+        scope.launch {
+            updateState(
+                editing = currentState.editingNote,
+                selected = currentState.selectedNote,
+                selectedIds = currentState.selectedNoteIds,
+                deletingBatch = true
+            )
+            val result = _noteRepository.bulkDeleteGlobalNotes(idsToDelete)
+            if (result.isSuccess) {
+                val data = result.getOrNull()
+                val deletedCount = data?.deletedCount ?: idsToDelete.size
+                allNotes = allNotes.filter { it.id !in idsToDelete }
+                val nextSelected = if (currentState.selectedNote?.id in idsToDelete) null else currentState.selectedNote
+                val msg = "ማስታወሻዎች በተሳካ ሁኔታ ተሰርዘዋል። ($deletedCount)"
+                updateState(
+                    selected = nextSelected,
+                    selectedIds = emptySet(),
+                    deletingBatch = false,
+                    batchMsg = msg
+                )
+                onComplete?.invoke(deletedCount, msg)
+            } else {
+                val errMsg = result.exceptionOrNull()?.message ?: "ማስታወሻዎችን መሰረዝ አልተቻለም።"
+                updateState(
+                    editing = currentState.editingNote,
+                    selected = currentState.selectedNote,
+                    selectedIds = currentState.selectedNoteIds,
+                    deletingBatch = false,
+                    batchErr = errMsg
+                )
+                onComplete?.invoke(0, errMsg)
+            }
+        }
+    }
+
 
     private fun setSubmitting(submitting: Boolean) {
         val currentState = _uiState.value as? NotesUiState.Success

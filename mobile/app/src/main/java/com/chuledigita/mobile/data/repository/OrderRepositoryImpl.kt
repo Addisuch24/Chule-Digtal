@@ -154,6 +154,27 @@ class OrderRepositoryImpl(
         }
     }
 
+    override suspend fun bulkDeleteOrders(orderIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData> {
+        return try {
+            val validLongs = orderIds.mapNotNull { it.toLongOrNull() }
+            if (validLongs.isEmpty()) {
+                return Result.failure(Exception("ምንም ትክክለኛ የትዕዛዝ መለያዎች አልተሰጡም።"))
+            }
+            val request = com.chuledigita.mobile.data.remote.model.BulkDeleteOrdersRequest(orderIds = validLongs)
+            val response = apiService.bulkDeleteOrders(request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val data = response.body()?.data ?: com.chuledigita.mobile.data.remote.model.BulkDeleteData(deletedCount = 0)
+                Result.success(data)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ትዕዛዞችን መሰረዝ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል፡ ${e.message}"))
+        }
+    }
+
+
     override suspend fun updateOrderStatus(orderId: String, status: OrderStatus): Result<Order> {
         return try {
             val idLong = orderId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የትዕዛዝ መለያ"))

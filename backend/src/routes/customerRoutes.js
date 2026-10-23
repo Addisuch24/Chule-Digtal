@@ -19,6 +19,17 @@ router.get(
   customerController.getCustomerBalance
 );
 
+// Bulk delete customers (support both POST and DELETE)
+router.post("/bulk-delete", customerController.deleteCustomers);
+router.delete("/bulk", customerController.deleteCustomers);
+
+// Delete single customer
+router.delete("/:customerId", customerController.deleteCustomer);
+
+// Update customer
+router.put("/:customerId", customerController.updateCustomer);
+router.patch("/:customerId", customerController.updateCustomer);
+
 // Get one customer
 router.get(
   "/:customerId",

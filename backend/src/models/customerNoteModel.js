@@ -67,7 +67,33 @@ async function getCustomerNotes(customerId) {
 
   return rows;
 }
+async function deleteCustomerNote(noteId) {
+  const [result] = await pool.execute(
+    "DELETE FROM customer_notes WHERE id = ?",
+    [noteId]
+  );
+  return result.affectedRows > 0;
+}
+
+async function deleteCustomerNotes(noteIds) {
+  if (!Array.isArray(noteIds) || noteIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [] };
+  }
+
+  const [result] = await pool.query(
+    "DELETE FROM customer_notes WHERE id IN (?)",
+    [noteIds]
+  );
+
+  return {
+    deletedCount: result.affectedRows,
+    deletedIds: noteIds,
+  };
+}
+
 module.exports = {
   createCustomerNote,
   getCustomerNotes,
+  deleteCustomerNote,
+  deleteCustomerNotes,
 };

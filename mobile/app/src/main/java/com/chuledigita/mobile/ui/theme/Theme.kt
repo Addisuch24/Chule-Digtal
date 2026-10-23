@@ -44,7 +44,9 @@ private val LightColorScheme = lightColorScheme(
     surface = LightSurface,
     onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = TextSecondary.copy(alpha = 0.35f),
+    outlineVariant = BorderDivider
 )
 
 @Composable

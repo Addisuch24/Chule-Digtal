@@ -102,7 +102,7 @@ async function getNotificationById(req, res) {
 }
 async function getNotificationsByRecipient(req, res) {
   try {
- const recipientId = req.user.id;
+    const recipientId = req.user.id;
     if (!recipientId || isNaN(recipientId)) {
       return res.status(400).json({
         success: false,
@@ -110,9 +110,13 @@ async function getNotificationsByRecipient(req, res) {
       });
     }
 
+    const unreadOnly = req.query.unread === "true" || req.query.unread === "1";
+    const limit = req.query.limit ? Number(req.query.limit) : 100;
+
     const notifications =
       await notificationModel.getNotificationsByRecipient(
-        Number(recipientId)
+        Number(recipientId),
+        { unreadOnly, limit }
       );
 
     return res.status(200).json({
@@ -128,6 +132,36 @@ async function getNotificationsByRecipient(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to get notifications",
+    });
+  }
+}
+
+async function markAllNotificationsAsRead(req, res) {
+  try {
+    const recipientId = req.user.id;
+    if (!recipientId || isNaN(recipientId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid recipientId is required",
+      });
+    }
+
+    const affectedRows = await notificationModel.markAllNotificationsAsRead(
+      Number(recipientId)
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "All notifications marked as read",
+      data: {
+        affectedRows,
+      },
+    });
+  } catch (error) {
+    console.error("Mark all notifications as read error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to mark all notifications as read",
     });
   }
 }
@@ -217,10 +251,110 @@ async function getUnreadNotificationCount(req, res) {
     });
   }
 }
+async function deleteNotification(req, res) {
+  try {
+    const { notificationId } = req.params;
+    const recipientId = req.user?.id;
+
+    if (!notificationId || isNaN(notificationId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid notificationId is required",
+      });
+    }
+
+    const existingNotification = await notificationModel.getNotificationById(
+      Number(notificationId)
+    );
+
+    if (!existingNotification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (existingNotification.recipient_id !== recipientId) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to delete this notification",
+      });
+    }
+
+    const deleted = await notificationModel.deleteNotification(
+      Number(notificationId),
+      recipientId
+    );
+
+    if (!deleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Failed to delete notification",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete notification error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete notification",
+    });
+  }
+}
+
+async function deleteNotifications(req, res) {
+  try {
+    const { notificationIds } = req.body;
+    const recipientId = req.user?.id;
+
+    if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "notificationIds must be a non-empty array",
+      });
+    }
+
+    const validIds = notificationIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid notification IDs provided",
+      });
+    }
+
+    const result = await notificationModel.deleteNotifications(
+      validIds,
+      recipientId
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} notification(s)`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete notifications error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete notifications",
+    });
+  }
+}
+
 module.exports = {
   createNotification,
   getNotificationById,
   getNotificationsByRecipient,
   markNotificationAsRead,
+  markAllNotificationsAsRead,
   getUnreadNotificationCount,
+  deleteNotification,
+  deleteNotifications,
 };

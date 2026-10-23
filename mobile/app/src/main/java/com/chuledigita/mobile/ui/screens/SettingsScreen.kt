@@ -1,5 +1,6 @@
 package com.chuledigita.mobile.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,9 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.chuledigita.mobile.ui.components.MainScaffold
-import com.chuledigita.mobile.ui.theme.ThemeManager
+import com.chuledigita.mobile.ui.theme.*
 
 @Composable
 fun SettingsScreen(
@@ -39,20 +41,21 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(OffWhiteBg)
                 .verticalScroll(scrollState)
                 .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // Appearance Section
             SettingsSection(title = "Appearance", icon = Icons.Outlined.Palette) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhiteSurface),
+                    border = BorderStroke(1.dp, BorderDivider),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
                         listOf("Light Mode", "Dark Mode", "System Default").forEach { theme ->
                             ThemeOptionRow(
                                 label = theme,
@@ -71,14 +74,15 @@ fun SettingsScreen(
             SettingsSection(title = "Notifications", icon = Icons.Outlined.NotificationsActive) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhiteSurface),
+                    border = BorderStroke(1.dp, BorderDivider),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
                         NotificationToggleRow(
                             title = "Enable Notifications",
-                            subtitle = "Receive alerts for customer registrations and balance updates",
+                            subtitle = "Receive alerts for customer registrations, orders, and balance updates",
                             checked = notificationsEnabled,
                             onCheckedChange = { notificationsEnabled = it }
                         )
@@ -89,23 +93,23 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Logout
-            Button(
+            OutlinedButton(
                 onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp)
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = ErrorColor
+                ),
+                border = BorderStroke(1.2.dp, ErrorColor.copy(alpha = 0.5f))
             ) {
-                Icon(Icons.Outlined.Logout, contentDescription = null)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("Logout", fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.Logout, contentDescription = null, tint = ErrorColor, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Logout", fontWeight = FontWeight.Bold, color = ErrorColor, fontSize = 15.sp)
             }
-            
-            Spacer(modifier = Modifier.height(40.dp))
+
+            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
@@ -116,11 +120,11 @@ private fun SettingsSection(
     icon: ImageVector,
     content: @Composable () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = EmeraldGreen)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
         }
         content()
     }
@@ -129,10 +133,15 @@ private fun SettingsSection(
 @Composable
 private fun ThemeOptionRow(label: String, isSelected: Boolean, onClick: () -> Unit) {
     ListItem(
-        headlineContent = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        headlineContent = { Text(label, style = MaterialTheme.typography.bodyLarge, color = TextPrimary) },
         trailingContent = {
-            RadioButton(selected = isSelected, onClick = onClick)
+            RadioButton(
+                selected = isSelected,
+                onClick = onClick,
+                colors = RadioButtonDefaults.colors(selectedColor = EmeraldGreen)
+            )
         },
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         modifier = Modifier.clickable { onClick() }
     )
 }
@@ -145,11 +154,22 @@ private fun NotificationToggleRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium) },
-        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = TextPrimary) },
+        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextSecondary) },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = androidx.compose.ui.graphics.Color.White,
+                    checkedTrackColor = EmeraldGreen,
+                    uncheckedThumbColor = TextSecondary,
+                    uncheckedTrackColor = BorderDivider
+                )
+            )
         },
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         modifier = Modifier.clickable { onCheckedChange(!checked) }
     )
 }
+

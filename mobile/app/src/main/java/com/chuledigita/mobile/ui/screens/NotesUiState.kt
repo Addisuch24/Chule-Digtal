@@ -14,9 +14,13 @@ sealed interface NotesUiState {
         val searchQuery: String = "",
         val editingNote: CustomerNote? = null,
         val selectedNote: CustomerNote? = null,
+        val selectedNoteIds: Set<String> = emptySet(),
         val isSubmitting: Boolean = false,
+        val isDeletingBatch: Boolean = false,
         val successMessage: String? = null,
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val batchDeleteMessage: String? = null,
+        val batchDeleteError: String? = null
     ) : NotesUiState
 
     data object Empty : NotesUiState

@@ -18,6 +18,16 @@ router.get(
   financialMovementController.getAllFinancialMovements
 );
 
+// Bulk delete financial movements
+router.post(
+  "/bulk-delete",
+  financialMovementController.deleteFinancialMovements
+);
+router.delete(
+  "/bulk",
+  financialMovementController.deleteFinancialMovements
+);
+
 // Update or delete a financial movement
 router.patch(
   "/:movementId",

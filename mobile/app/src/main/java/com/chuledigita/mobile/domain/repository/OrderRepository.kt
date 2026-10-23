@@ -39,6 +39,11 @@ interface OrderRepository {
     suspend fun deleteOrder(orderId: String): Result<Unit>
 
     /**
+     * Deletes multiple orders, preserving orders linked to financial records for accounting audit integrity.
+     */
+    suspend fun bulkDeleteOrders(orderIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
+
+    /**
      * Updates the status of an existing order profile.
      */
     suspend fun updateOrderStatus(orderId: String, status: OrderStatus): Result<Order>

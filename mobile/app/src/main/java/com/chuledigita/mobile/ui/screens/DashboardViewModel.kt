@@ -28,7 +28,9 @@ class DashboardViewModel(
     private val _noteRepository: NoteRepository,
     private val _orderRepository: OrderRepository,
     private val _financialRepository: FinancialRepository,
-    private val _customerRepository: CustomerRepository
+    private val _customerRepository: CustomerRepository,
+    private val _notificationRepository: com.chuledigita.mobile.domain.repository.NotificationRepository? = null,
+    private val _socketManager: com.chuledigita.mobile.data.remote.SocketManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
@@ -36,21 +38,46 @@ class DashboardViewModel(
 
     init {
         loadDashboard()
+        _notificationRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.realtimeEventFlow.collect {
+                    loadDashboard()
+                }
+            }
+        }
+        _socketManager?.let { sm ->
+            viewModelScope.launch {
+                sm.dashboardRefreshFlow.collect {
+                    loadDashboard()
+                }
+            }
+        }
     }
 
     fun loadDashboard() {
         viewModelScope.launch {
             _uiState.value = DashboardUiState.Loading
             try {
+                var customersCount = 0
+                var ordersCount = 0
+                var notesCount = 0
+                var currentBalance = 0.0
+                var totalDebit = 0.0
+                var totalCredit = 0.0
+                var recentOrders = emptyList<DashboardRecentOrder>()
+                var recentNotes = emptyList<DashboardRecentNote>()
+
                 val response = _apiService.getDashboardSummary()
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
-                    val customersCount = data?.customers?.total ?: 0
-                    val ordersCount = data?.orders?.total ?: 0
-                    val notesCount = data?.notes?.total ?: 0
-                    val currentBalance = data?.financialMovements?.balance ?: 0.0
+                    customersCount = data?.customers?.total ?: 0
+                    ordersCount = data?.orders?.total ?: 0
+                    notesCount = data?.notes?.total ?: 0
+                    currentBalance = data?.financialMovements?.balance ?: 0.0
+                    totalDebit = data?.financialMovements?.totalDebit ?: 0.0
+                    totalCredit = data?.financialMovements?.totalCredit ?: 0.0
 
-                    val recentOrders = data?.recentOrders?.map { orderDto ->
+                    recentOrders = data?.recentOrders?.map { orderDto ->
                         val displayTitle = orderDto.title?.takeIf { it.isNotBlank() }
                             ?: orderDto.customerName?.takeIf { it.isNotBlank() }
                             ?: orderDto.orderNumber?.takeIf { it.isNotBlank() }
@@ -63,7 +90,7 @@ class DashboardViewModel(
                         )
                     } ?: emptyList()
 
-                    val recentNotes = data?.recentNotes?.map { noteDto ->
+                    recentNotes = data?.recentNotes?.map { noteDto ->
                         val displayTitle = noteDto.noteText?.lineSequence()?.firstOrNull { it.isNotBlank() }
                             ?: "ማስታወሻ #${noteDto.id}"
 
@@ -73,24 +100,52 @@ class DashboardViewModel(
                             date = formatDisplayDate(noteDto.createdAt)
                         )
                     } ?: emptyList()
+                }
 
+                // Explicitly refresh global notes count to guarantee 100% freshness when refreshing dashboard
+                val globalNotesResult = _noteRepository.getGlobalNotes()
+                if (globalNotesResult.isSuccess) {
+                    val freshNotes = globalNotesResult.getOrNull() ?: emptyList()
+                    notesCount = freshNotes.size
+                }
+
+                // Explicitly refresh customers count to guarantee 100% real count directly from database
+                val customersResult = _customerRepository.getCustomers()
+                if (customersResult.isSuccess) {
+                    val freshCustomers = customersResult.getOrNull() ?: emptyList()
+                    customersCount = freshCustomers.size
+                }
+
+                _uiState.value = DashboardUiState.Success(
+                    notesCount = notesCount,
+                    ordersCount = ordersCount,
+                    customersCount = customersCount,
+                    currentBalance = currentBalance,
+                    totalDebit = totalDebit,
+                    totalCredit = totalCredit,
+                    recentOrders = recentOrders,
+                    recentNotes = recentNotes
+                )
+            } catch (e: Exception) {
+                // Fallback: try loading from repositories if dashboard summary fails
+                try {
+                    val globalNotesResult = _noteRepository.getGlobalNotes()
+                    val notesCount = globalNotesResult.getOrNull()?.size ?: 0
+                    val customersResult = _customerRepository.getCustomers()
+                    val custCount = customersResult.getOrNull()?.size ?: 0
                     _uiState.value = DashboardUiState.Success(
                         notesCount = notesCount,
-                        ordersCount = ordersCount,
-                        customersCount = customersCount,
-                        currentBalance = currentBalance,
-                        recentOrders = recentOrders,
-                        recentNotes = recentNotes
+                        ordersCount = 0,
+                        customersCount = custCount,
+                        currentBalance = 0.0,
+                        totalDebit = 0.0,
+                        totalCredit = 0.0
                     )
-                } else {
-                    val message = response.message().takeIf { !it.isNullOrBlank() }
-                        ?: "ዳሽቦርድ መረጃን መጫን አልተቻለም። እባክዎ እንደገና ይሞክሩ።"
-                    _uiState.value = DashboardUiState.Error(message)
+                } catch (_: Exception) {
+                    _uiState.value = DashboardUiState.Error(
+                        e.message ?: "የኔትወርክ ስህተት አጋጥሟል። እባክዎ የኢንተርኔት ግንኙነትዎን ያረጋግጡ።"
+                    )
                 }
-            } catch (e: Exception) {
-                _uiState.value = DashboardUiState.Error(
-                    e.message ?: "የኔትወርክ ስህተት አጋጥሟል። እባክዎ የኢንተርኔት ግንኙነትዎን ያረጋግጡ።"
-                )
             }
         }
     }
@@ -127,7 +182,9 @@ class DashboardViewModel(
                     _noteRepository = container.noteRepository,
                     _orderRepository = container.orderRepository,
                     _financialRepository = container.financialRepository,
-                    _customerRepository = container.customerRepository
+                    _customerRepository = container.customerRepository,
+                    _notificationRepository = container.notificationRepository,
+                    _socketManager = container.socketManager
                 )
             }
         }

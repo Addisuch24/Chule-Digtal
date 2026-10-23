@@ -27,6 +27,11 @@ interface NoteRepository {
     suspend fun deleteGlobalNote(noteId: String): Result<Unit>
 
     /**
+     * Deletes multiple global shared family-business notes.
+     */
+    suspend fun bulkDeleteGlobalNotes(noteIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
+
+    /**
      * Retrieves chronological communication or tracking notes for a customer profile.
      */
     suspend fun getCustomerNotes(customerId: String): Result<List<CustomerNote>>

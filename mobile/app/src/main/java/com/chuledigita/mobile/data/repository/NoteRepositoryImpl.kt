@@ -116,6 +116,27 @@ class NoteRepositoryImpl(
         }
     }
 
+    override suspend fun bulkDeleteGlobalNotes(noteIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData> {
+        return try {
+            val validLongs = noteIds.mapNotNull { it.toLongOrNull() }
+            if (validLongs.isEmpty()) {
+                return Result.failure(Exception("ምንም ትክክለኛ የማስታወሻ መለያዎች አልተሰጡም።"))
+            }
+            val request = com.chuledigita.mobile.data.remote.model.BulkDeleteNotesRequest(noteIds = validLongs)
+            val response = apiService.bulkDeleteGlobalNotes(request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val data = response.body()?.data ?: com.chuledigita.mobile.data.remote.model.BulkDeleteData(deletedCount = 0)
+                Result.success(data)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "ማስታወሻዎችን መሰረዝ አልተቻለም።")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("የአውታረ መረብ ችግር አጋጥሟል። እባክዎ ግንኙነትዎን ያረጋግጡ።"))
+        }
+    }
+
+
     override suspend fun getCustomerNotes(customerId: String): Result<List<CustomerNote>> {
         return try {
             val idLong = customerId.toLongOrNull() ?: return Result.failure(Exception("ትክክለኛ ያልሆነ የደንበኛ መለያ"))

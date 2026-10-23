@@ -36,6 +36,7 @@ function Finance() {
   const [editingMovement, setEditingMovement] = useState(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState(null);
   const [openMenuMovementId, setOpenMenuMovementId] = useState(null);
+  const [selectedMovementIds, setSelectedMovementIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState("");
   const [busyMovementId, setBusyMovementId] = useState(null);
   const movementList = useRef(null);
@@ -229,24 +230,37 @@ function Finance() {
       setSubmitting(true);
       const normalizedName = customerName.trim().toLocaleLowerCase();
       const normalizedPhone = phone.replace(/\D/g, "");
-      let customer = normalizedPhone
+
+      // 1. Check if an existing customer matches by phone (if valid digits provided)
+      let customer = normalizedPhone && normalizedPhone.length >= 7
         ? customers.find(
             (item) =>
               String(item.phone || "").replace(/\D/g, "") === normalizedPhone
           )
         : null;
 
+      // 2. If not found by phone, match by customer name (case-insensitive)
       if (!customer) {
         customer = customers.find(
           (item) =>
-            String(item.full_name || "").trim().toLocaleLowerCase() ===
-              normalizedName &&
-            (!normalizedPhone ||
-              String(item.phone || "").replace(/\D/g, "") === normalizedPhone)
+            String(item.full_name || item.name || "").trim().toLocaleLowerCase() ===
+            normalizedName
         );
       }
 
-      if (!customer) {
+      // 3. If customer exists and new/changed phone was entered, update their phone in-place
+      if (customer) {
+        const trimmedPhone = phone.trim();
+        if (trimmedPhone && trimmedPhone !== (customer.phone || "")) {
+          try {
+            await api.patch(`/customers/${customer.id}`, { phone: trimmedPhone });
+            customer.phone = trimmedPhone;
+          } catch (phoneUpdateErr) {
+            console.warn("Could not update customer phone:", phoneUpdateErr);
+          }
+        }
+      } else {
+        // Customer truly does not exist yet, create them
         const customerResponse = await api.post("/customers", {
           full_name: customerName.trim(),
           phone: phone.trim() || null,
@@ -319,6 +333,80 @@ function Finance() {
     }
   }
 
+  async function handleDeleteCustomer(group) {
+    if (
+      !window.confirm(
+        `Delete customer "${group.name}" and all associated ledger records? This will decrease the customer count on the dashboard.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setMessage("");
+      setError("");
+      await api.delete(`/customers/${group.id}`);
+      setMessage(`Customer "${group.name}" was deleted successfully.`);
+      await Promise.all([loadMovements(), loadCustomers()]);
+    } catch (requestError) {
+      console.error("Delete customer error:", requestError);
+      setError(
+        requestError.response?.data?.message ||
+          "Could not delete this customer."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleToggleSelectMovement(id, event) {
+    event.stopPropagation();
+    setSelectedMovementIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function handleSelectAllMovements() {
+    if (selectedMovementIds.length === filteredMovements.length) {
+      setSelectedMovementIds([]);
+    } else {
+      setSelectedMovementIds(filteredMovements.map((m) => m.id));
+    }
+  }
+
+  async function handleBulkDeleteMovements() {
+    if (selectedMovementIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedMovementIds.length} selected financial movement(s)? This will adjust customer balances and ledger records permanently.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setMessage("");
+      setError("");
+      const response = await api.post("/financial-movements/bulk-delete", {
+        movementIds: selectedMovementIds,
+      });
+      setMessage(
+        `Successfully deleted ${response.data?.data?.deletedCount || selectedMovementIds.length} financial movement(s).`
+      );
+      setSelectedMovementIds([]);
+      await Promise.all([loadMovements(), loadCustomers()]);
+    } catch (requestError) {
+      console.error("Bulk delete movements error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to delete movements."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function startEditingMovement(movement) {
     flushMovementEdit();
     const nextEdit = {
@@ -336,34 +424,45 @@ function Finance() {
     setOpenMenuMovementId(null);
   }
 
-  const filteredMovements = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return movements.filter((movement) => {
-      if (!query) return true;
-      return [
-        movement.customer_name,
-        movement.customer_phone,
-        movement.full_name,
-        movement.description,
-        movement.movement_type,
-        movement.verification_status,
-      ].some((value) =>
-        String(value || "")
-          .toLowerCase()
-          .includes(query)
-      );
-    });
-  }, [movements, search]);
+  const query = search.trim().toLowerCase();
+  const filteredMovements = query
+    ? movements.filter((movement) =>
+        [
+          movement.customer_name,
+          movement.customer_phone,
+          movement.full_name,
+          movement.description,
+          movement.movement_type,
+          movement.verification_status,
+        ].some((value) =>
+          String(value || "")
+            .toLowerCase()
+            .includes(query)
+        )
+      )
+    : movements;
 
   const customerGroups = useMemo(() => {
+    // Group all balance records by normalized customer identity so records under one customer name are counted as ONE customer
     const balances = new Map();
     movements.forEach((movement) => {
-      const customerIdValue = Number(movement.customer_id);
-      const balance = balances.get(customerIdValue) || 0;
+      const matchedCust = customers.find(
+        (c) =>
+          Number(c.id) === Number(movement.customer_id) ||
+          (c.full_name && movement.customer_name && c.full_name.trim().toLowerCase() === movement.customer_name.trim().toLowerCase())
+      );
+      const nameKey = (
+        matchedCust?.full_name ||
+        movement.customer_name ||
+        movement.full_name ||
+        `customer-${movement.customer_id}`
+      ).trim().toLowerCase();
+
+      const balance = balances.get(nameKey) || 0;
       if (movement.verification_status !== "REJECTED") {
         const amountValue = Number(movement.amount || 0);
         balances.set(
-          customerIdValue,
+          nameKey,
           balance +
             ((movement.movement_type || movement.movementType) === "CREDIT"
               ? amountValue
@@ -374,38 +473,54 @@ function Finance() {
 
     const groups = new Map();
     filteredMovements.forEach((movement) => {
-      const customerIdValue = Number(movement.customer_id);
-      if (!groups.has(customerIdValue)) {
-        groups.set(customerIdValue, {
-          id: customerIdValue,
+      const matchedCust = customers.find(
+        (c) =>
+          Number(c.id) === Number(movement.customer_id) ||
+          (c.full_name && movement.customer_name && c.full_name.trim().toLowerCase() === movement.customer_name.trim().toLowerCase())
+      );
+      const nameKey = (
+        matchedCust?.full_name ||
+        movement.customer_name ||
+        movement.full_name ||
+        `customer-${movement.customer_id}`
+      ).trim().toLowerCase();
+
+      if (!groups.has(nameKey)) {
+        groups.set(nameKey, {
+          id: matchedCust?.id || Number(movement.customer_id),
           name:
+            matchedCust?.full_name ||
             movement.customer_name ||
             movement.full_name ||
-            `Customer #${customerIdValue}`,
-          phone: movement.customer_phone || "",
-          balance: balances.get(customerIdValue) || 0,
+            `Customer #${movement.customer_id}`,
+          phone: matchedCust?.phone || movement.customer_phone || "",
+          balance: balances.get(nameKey) || 0,
           movements: [],
         });
       }
-      groups.get(customerIdValue).movements.push(movement);
+      groups.get(nameKey).movements.push(movement);
     });
     return [...groups.values()].sort((first, second) =>
       first.name.localeCompare(second.name)
     );
-  }, [filteredMovements, movements]);
+  }, [customers, filteredMovements, movements]);
 
   const customersOwed = customerGroups.filter((group) => group.balance < 0);
   const customersInCredit = customerGroups.filter(
     (group) => group.balance > 0
   );
+  const customersSettled = customerGroups.filter(
+    (group) => group.balance === 0
+  );
 
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="የገንዘብ ሂሳብ"
-        title="ፋይናንስ"
-        description="የደንበኞችን ዕዳና የተቀበሉትን ብር ይመዝግቡ።"
+        eyebrow="Financial Overview"
+        title="Finance"
+        description="Track income, expenses and keep your customer balances healthy."
         action={<span className="count-label">{movements.length} movements</span>}
+        theme="finance"
       />
 
       <section className="panel">
@@ -421,11 +536,30 @@ function Finance() {
               Customer name
               <input
                 value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  setCustomerName(val);
+                  const matched = customers.find(
+                    (c) =>
+                      String(c.full_name || c.name || "").trim().toLowerCase() ===
+                      val.trim().toLowerCase()
+                  );
+                  if (matched && matched.phone && !phone) {
+                    setPhone(matched.phone);
+                  }
+                }}
+                list="finance-customer-suggestions"
                 placeholder="Enter customer name"
-                autoComplete="name"
+                autoComplete="off"
                 required
               />
+              <datalist id="finance-customer-suggestions">
+                {customers.map((c) => (
+                  <option key={c.id} value={c.full_name || c.name}>
+                    {c.phone ? `${c.full_name || c.name} (${c.phone})` : c.full_name || c.name}
+                  </option>
+                ))}
+              </datalist>
             </label>
 
             <label>
@@ -476,9 +610,21 @@ function Finance() {
 
       <section className="panel" ref={movementList}>
         <div className="section-heading">
-          <div>
-            <p className="eyebrow">Shared ledger</p>
-            <h2>Customer balances</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {filteredMovements.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedMovementIds.length > 0 && selectedMovementIds.length === filteredMovements.length}
+                onChange={handleSelectAllMovements}
+                aria-label="Select all movements"
+                title="Select all movements"
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+            )}
+            <div>
+              <p className="eyebrow">Shared ledger</p>
+              <h2>Customer balances</h2>
+            </div>
           </div>
           <input
             className="search-input"
@@ -488,6 +634,53 @@ function Finance() {
             aria-label="Search financial movements"
           />
         </div>
+
+        {selectedMovementIds.length > 0 && (
+          <div
+            className="bulk-action-bar"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "0.6rem 1rem",
+              marginBottom: "1rem",
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "8px",
+            }}
+          >
+            <span>
+              <strong>{selectedMovementIds.length}</strong> movement(s) selected
+            </span>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="button button-danger"
+                style={{
+                  backgroundColor: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.4rem 0.8rem",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+                onClick={handleBulkDeleteMovements}
+                disabled={submitting}
+              >
+                {submitting ? "Deleting..." : `Delete Selected (${selectedMovementIds.length})`}
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                style={{ padding: "0.4rem 0.8rem", borderRadius: "6px" }}
+                onClick={() => setSelectedMovementIds([])}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <FeedbackState type="loading" title="Loading financial movements..." />
@@ -505,18 +698,29 @@ function Finance() {
             {[
               {
                 key: "negative",
-                label: "ዕዳ ያለባቸው ደንበኞች",
+                label: "Customers with Debt",
                 sign: "−",
                 groups: customersOwed,
                 balanceClass: "balance-negative",
               },
               {
                 key: "positive",
-                label: "ቀሪ ብር ያላቸው ደንበኞች",
+                label: "Customers in Credit",
                 sign: "+",
                 groups: customersInCredit,
                 balanceClass: "balance-positive",
               },
+              ...(customersSettled.length > 0 || query
+                ? [
+                    {
+                      key: "settled",
+                      label: "Settled Accounts",
+                      sign: "✓",
+                      groups: customersSettled,
+                      balanceClass: "balance-settled",
+                    },
+                  ]
+                : []),
             ].map((column) => (
               <section
                 className={`finance-balance-column finance-${column.key}`}
@@ -549,12 +753,38 @@ function Finance() {
                             </button>
                             {group.phone && <small>{group.phone}</small>}
                           </div>
-                          <strong
-                            className={`finance-customer-balance ${column.balanceClass}`}
-                          >
-                            {group.balance > 0 ? "+" : "−"}
-                            {formatAmount(Math.abs(group.balance))}
-                          </strong>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                            <strong
+                              className={`finance-customer-balance ${column.balanceClass}`}
+                            >
+                              {group.balance > 0 ? "+" : "−"}
+                              {formatAmount(Math.abs(group.balance))}
+                            </strong>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              title={`Delete ${group.name} and all associated ledger records`}
+                              aria-label={`Delete ${group.name}`}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "#ef4444",
+                                padding: "4px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                opacity: 0.75,
+                              }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteCustomer(group);
+                              }}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
+                              </svg>
+                            </button>
+                          </div>
                         </header>
                         {expandedCustomerId === group.id && (
                           <div
@@ -626,8 +856,15 @@ function Finance() {
                   </div>
                 ) : (
                   <>
-                    <div className="movement-main">
-                      <div>
+                    <div className="movement-main" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedMovementIds.includes(movement.id)}
+                        onChange={(e) => handleToggleSelectMovement(movement.id, e)}
+                        aria-label={`Select movement ${movement.id}`}
+                        style={{ cursor: "pointer", width: "18px", height: "18px", flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1 }}>
                         <div className="movement-title">
                           <strong>
                             {movement.customer_name ||

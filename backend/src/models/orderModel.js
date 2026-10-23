@@ -258,12 +258,62 @@ async function updateOrder({
   return getOrderById(orderId);
 }
 
+async function checkOrderFinancialReferences(orderId) {
+  const [rows] = await pool.execute(
+    "SELECT COUNT(*) AS count FROM financial_movements WHERE reference_type = 'ORDER' AND reference_id = ?",
+    [orderId]
+  );
+  return Number(rows[0].count) > 0;
+}
+
 async function deleteOrder(orderId) {
   const [result] = await pool.execute(
     "DELETE FROM orders WHERE id = ?",
     [orderId]
   );
   return result.affectedRows > 0;
+}
+
+async function deleteOrders(orderIds) {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [], skipped: [] };
+  }
+
+  // Check if any order is referenced by financial_movements
+  const [referencedRows] = await pool.query(
+    "SELECT DISTINCT reference_id FROM financial_movements WHERE reference_type = 'ORDER' AND reference_id IN (?)",
+    [orderIds]
+  );
+  const referencedSet = new Set(referencedRows.map((r) => Number(r.reference_id)));
+
+  const eligibleIds = [];
+  const skipped = [];
+
+  for (const id of orderIds) {
+    if (referencedSet.has(Number(id))) {
+      skipped.push({
+        id,
+        reason: "Order has linked financial records and cannot be deleted for accounting audit integrity",
+      });
+    } else {
+      eligibleIds.push(id);
+    }
+  }
+
+  if (eligibleIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [], skipped };
+  }
+
+  const [result] = await pool.query(
+    "DELETE FROM orders WHERE id IN (?)",
+    [eligibleIds]
+  );
+
+  return {
+    deletedCount: result.affectedRows,
+    deletedIds: eligibleIds,
+    skipped,
+  };
 }
 
 async function updateOrderStatus({
@@ -387,6 +437,8 @@ module.exports = {
   getAllOrders,
   updateOrder,
   deleteOrder,
+  deleteOrders,
+  checkOrderFinancialReferences,
   verifyOrder,
   rejectOrder,
   updateOrderStatus,

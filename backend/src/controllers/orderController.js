@@ -187,6 +187,14 @@ async function deleteOrder(req, res) {
       });
     }
 
+    const hasFinancialRef = await orderModel.checkOrderFinancialReferences(orderId);
+    if (hasFinancialRef) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete order because financial transactions reference this order. Financial records must be preserved for audit safety.",
+      });
+    }
+
     const deleted = await orderModel.deleteOrder(orderId);
     if (!deleted) {
       return res.status(404).json({
@@ -194,6 +202,15 @@ async function deleteOrder(req, res) {
         message: "Order not found",
       });
     }
+
+    await activityService.recordActivity({
+      actorId: Number(req.user.id),
+      activityType: "ORDER_DELETED",
+      entityType: "ORDER",
+      entityId: orderId,
+      description: `Order #${orderId} was deleted`,
+      metadata: { orderId },
+    });
 
     return res.status(200).json({
       success: true,
@@ -204,6 +221,67 @@ async function deleteOrder(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to delete order",
+    });
+  }
+}
+
+async function deleteOrders(req, res) {
+  try {
+    const rawIds = req.body.orderIds || req.body.ids;
+    const deletedBy = Number(req.user.id);
+
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of order IDs ('orderIds' or 'ids') is required",
+      });
+    }
+
+    if (rawIds.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete more than 100 orders at a time",
+      });
+    }
+
+    const validIds = rawIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid order IDs provided",
+      });
+    }
+
+    const result = await orderModel.deleteOrders(validIds);
+
+    if (result.deletedCount > 0) {
+      await activityService.recordActivity({
+        actorId: deletedBy,
+        activityType: "ORDER_BULK_DELETED",
+        entityType: "ORDER",
+        entityId: result.deletedIds[0],
+        description: `${result.deletedCount} orders were deleted`,
+        metadata: {
+          deletedCount: result.deletedCount,
+          orderIds: result.deletedIds,
+          skipped: result.skipped,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} orders deleted successfully`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete orders error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete orders",
     });
   }
 }
@@ -533,6 +611,7 @@ module.exports = {
   createOrder,
   updateOrder,
   deleteOrder,
+  deleteOrders,
   getOrderById,
   getAllOrders,
   verifyOrder,

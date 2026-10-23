@@ -1,8 +1,13 @@
 package com.chuledigita.mobile.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -11,6 +16,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.chuledigita.mobile.ChuleApplication
 import com.chuledigita.mobile.data.local.SessionPreferences
+import com.chuledigita.mobile.domain.model.NotificationType
+import com.chuledigita.mobile.notifications.InAppPopUpState
+import com.chuledigita.mobile.ui.components.InAppNotificationBanner
 import com.chuledigita.mobile.ui.screens.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,12 +29,14 @@ fun AppNavigation(
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
-    val isLoggedIn = remember { SessionPreferences.isLoggedIn(context) }
-    val startDestination = if (isLoggedIn) Screen.Dashboard.route else Screen.Login.route
+    val application = context.applicationContext as ChuleApplication
+    val notificationRepo = application.container.notificationRepository
+    val inAppManager = notificationRepo.inAppNotificationManager
+    val popUpState by inAppManager.currentPopUp.collectAsStateWithLifecycle()
 
     val logoutAction: () -> Unit = {
         SessionPreferences.setLoggedIn(context, false)
-        val application = context.applicationContext as ChuleApplication
+        inAppManager.clearSession()
         CoroutineScope(Dispatchers.IO).launch {
             application.container.sessionRepository.clearSession()
         }
@@ -35,10 +45,70 @@ fun AppNavigation(
         }
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = startDestination
-    ) {
+    val handlePopUpClick: (InAppPopUpState) -> Unit = { state ->
+        inAppManager.dismiss()
+        when (state) {
+            is InAppPopUpState.Single -> {
+                val item = state.item
+                CoroutineScope(Dispatchers.IO).launch {
+                    notificationRepo.markAsRead(item.id)
+                }
+                when (item.type) {
+                    NotificationType.ORDER_CREATED,
+                    NotificationType.ORDER_VERIFIED,
+                    NotificationType.ORDER_REJECTED,
+                    NotificationType.ORDER_STATUS_UPDATED -> {
+                        val entityId = item.entityId
+                        if (!entityId.isNullOrBlank()) {
+                            navController.navigate(Screen.OrderDetails.createRoute(entityId))
+                        } else {
+                            navController.navigate(Screen.Orders.route)
+                        }
+                    }
+                    NotificationType.BUSINESS_NOTE_CREATED -> {
+                        val entityId = item.entityId
+                        if (!entityId.isNullOrBlank()) {
+                            navController.navigate(Screen.NoteDetails.createRoute(entityId))
+                        } else {
+                            navController.navigate(Screen.Notes.route)
+                        }
+                    }
+                    NotificationType.CUSTOMER_NOTE_CREATED,
+                    NotificationType.CUSTOMER_CREATED,
+                    NotificationType.CUSTOMER_UPDATED,
+                    NotificationType.CUSTOMER_DELETED,
+                    NotificationType.CUSTOMER_BULK_DELETED -> {
+                        val entityId = item.entityId
+                        if (!entityId.isNullOrBlank() && item.type != NotificationType.CUSTOMER_DELETED && item.type != NotificationType.CUSTOMER_BULK_DELETED) {
+                            navController.navigate(Screen.CustomerDetails.createRoute(entityId))
+                        } else {
+                            navController.navigate(Screen.Customers.route)
+                        }
+                    }
+                    NotificationType.FINANCIAL_MOVEMENT_CREATED,
+                    NotificationType.FINANCIAL_MOVEMENT_VERIFIED,
+                    NotificationType.FINANCIAL_MOVEMENT_REJECTED,
+                    NotificationType.FINANCIAL_MOVEMENT_DELETED,
+                    NotificationType.FINANCIAL_MOVEMENT_BULK_DELETED,
+                    NotificationType.PAYMENT_RECORDED -> {
+                        navController.navigate(Screen.Finance.route)
+                    }
+                    NotificationType.SYSTEM -> {
+                        navController.navigate(Screen.Notifications.route)
+                    }
+                }
+            }
+            is InAppPopUpState.Summary -> {
+                navController.navigate(Screen.Notifications.route)
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Login.route
+        ) {
         composable(route = Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
@@ -56,7 +126,6 @@ fun AppNavigation(
         composable(route = Screen.SignUp.route) {
             SignUpScreen(
                 onSignUpSuccess = {
-                    // Registration does not return a token; user logs in with new credentials
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.SignUp.route) { inclusive = true }
                     }
@@ -174,4 +243,12 @@ fun AppNavigation(
             CreateOrderScreen(navController = navController)
         }
     }
+
+    InAppNotificationBanner(
+        popUpState = popUpState,
+        onDismiss = { inAppManager.dismiss() },
+        onPopUpClick = handlePopUpClick,
+        modifier = Modifier.align(Alignment.TopCenter)
+    )
+}
 }

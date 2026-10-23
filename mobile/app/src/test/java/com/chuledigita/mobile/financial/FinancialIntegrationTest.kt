@@ -9,6 +9,7 @@ import com.chuledigita.mobile.domain.model.MovementType
 import com.chuledigita.mobile.domain.model.UserSession
 import com.chuledigita.mobile.domain.model.VerificationStatus
 import com.chuledigita.mobile.domain.repository.SessionRepository
+
 import com.chuledigita.mobile.ui.screens.FinanceUiState
 import com.chuledigita.mobile.ui.screens.FinanceViewModel
 import com.chuledigita.mobile.ui.screens.FinancialMovementDetailsUiState
@@ -19,6 +20,8 @@ import com.chuledigita.mobile.ui.screens.RecordFinancialMovementViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.*
@@ -73,6 +76,7 @@ class FinancialIntegrationTest {
 
     @Before
     fun setUp() = runBlocking {
+        kotlinx.coroutines.Dispatchers.setMain(kotlinx.coroutines.Dispatchers.Unconfined)
         com.chuledigita.mobile.data.remote.ApiConfig.BASE_URL = localApiBaseUrl
         fakeSessionRepository = FakeSessionRepository()
 
@@ -120,6 +124,7 @@ class FinancialIntegrationTest {
             } catch (_: Exception) {}
         }
         disposableMovementIds.clear()
+        kotlinx.coroutines.Dispatchers.resetMain()
     }
 
     @Test
@@ -276,9 +281,8 @@ class FinancialIntegrationTest {
     fun testFinanceViewModel_lifecycle_and_balanceGrouping() = runBlocking {
         val testScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
         val vm = FinanceViewModel(
-            _financialRepository = financialRepository,
-            _customerRepository = customerRepository,
-            externalScope = testScope
+            financialRepository = financialRepository,
+            customerRepository = customerRepository
         )
 
         var successState: FinanceUiState.Success? = null

@@ -32,6 +32,10 @@ import androidx.navigation.NavHostController
 import com.chuledigita.mobile.domain.model.CustomerNote
 import com.chuledigita.mobile.ui.components.ConfirmDialog
 import com.chuledigita.mobile.ui.components.MainScaffold
+import com.chuledigita.mobile.ui.components.MultiSelectActionBar
+import com.chuledigita.mobile.ui.components.MultiSelectDeleteConfirmationDialog
+import com.chuledigita.mobile.ui.components.NotesHeaderIllustration
+import com.chuledigita.mobile.ui.components.ScreenHeaderBanner
 import com.chuledigita.mobile.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -153,7 +157,11 @@ fun NotesScreen(
                         onCancelEditing = viewModel::cancelEditing,
                         onSelectNote = viewModel::selectNote,
                         onSearch = viewModel::onSearchQueryChanged,
-                        onClearMessages = viewModel::clearMessages
+                        onClearMessages = viewModel::clearMessages,
+                        onToggleSelectNote = viewModel::toggleSelectNote,
+                        onSelectAllNotes = viewModel::selectAllNotes,
+                        onClearSelection = viewModel::clearNoteSelection,
+                        onBulkDeleteSelected = viewModel::bulkDeleteSelectedNotes
                     )
                 }
             }
@@ -171,9 +179,14 @@ private fun NotesContent(
     onCancelEditing: () -> Unit,
     onSelectNote: (CustomerNote?) -> Unit,
     onSearch: (String) -> Unit,
-    onClearMessages: () -> Unit
+    onClearMessages: () -> Unit,
+    onToggleSelectNote: (String) -> Unit,
+    onSelectAllNotes: (List<String>) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkDeleteSelected: (((Int, String) -> Unit)?) -> Unit
 ) {
     var noteToDelete by remember { mutableStateOf<CustomerNote?>(null) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -248,16 +261,16 @@ private fun NotesContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.08f)),
+                color = PureWhiteSurface,
+                border = BorderStroke(1.dp, BorderDivider),
                 shadowElevation = 2.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Header row: "YOUR NOTES", "All notes", and Search notes
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -267,16 +280,16 @@ private fun NotesContent(
                                 Text(
                                     text = "YOUR NOTES",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = BrandGold,
+                                    color = EmeraldGreen,
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "All notes",
+                                    text = "All notes (${state.filteredNotes.size})",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
-                                    color = BrandGreen
+                                    color = BrandNavy
                                 )
                             }
                         }
@@ -287,30 +300,42 @@ private fun NotesContent(
                             modifier = Modifier.fillMaxWidth(),
                             placeholder = {
                                 Text(
-                                    "Search notes",
-                                    color = BrandGreen.copy(alpha = 0.4f),
-                                    fontSize = 12.sp
+                                    "Search notes...",
+                                    color = TextSecondary.copy(alpha = 0.5f),
+                                    fontSize = 13.sp
                                 )
                             },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Outlined.Search,
                                     contentDescription = null,
-                                    tint = BrandGreen.copy(alpha = 0.5f),
+                                    tint = TextSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = BrandGreen.copy(alpha = 0.3f),
-                                unfocusedBorderColor = BrandGreen.copy(alpha = 0.1f),
-                                focusedContainerColor = CreamSurface,
-                                unfocusedContainerColor = CreamSurface,
-                                cursorColor = BrandGreen
+                                focusedBorderColor = EmeraldGreen,
+                                unfocusedBorderColor = BorderDivider,
+                                focusedContainerColor = OffWhiteBg,
+                                unfocusedContainerColor = OffWhiteBg,
+                                cursorColor = EmeraldGreen,
+                                focusedTextColor = BrandNavy,
+                                unfocusedTextColor = BrandNavy
                             ),
                             singleLine = true
                         )
                     }
+
+                    MultiSelectActionBar(
+                        selectedCount = state.selectedNoteIds.size,
+                        totalCount = state.filteredNotes.size,
+                        isDeleting = state.isDeletingBatch,
+                        onSelectAll = { onSelectAllNotes(state.filteredNotes.map { it.id }) },
+                        onClearSelection = onClearSelection,
+                        onDeleteSelected = { showBulkDeleteDialog = true },
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
 
                     if (state.filteredNotes.isEmpty()) {
                         Box(
@@ -332,7 +357,10 @@ private fun NotesContent(
                                     note = note,
                                     onClick = { onSelectNote(note) },
                                     onEdit = { onStartEditing(note) },
-                                    onDelete = { noteToDelete = note }
+                                    onDelete = { noteToDelete = note },
+                                    isSelected = state.selectedNoteIds.contains(note.id),
+                                    isSelectionActive = state.selectedNoteIds.isNotEmpty(),
+                                    onToggleSelect = { onToggleSelectNote(note.id) }
                                 )
                             }
                         }
@@ -344,6 +372,23 @@ private fun NotesContent(
         item {
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (showBulkDeleteDialog) {
+        MultiSelectDeleteConfirmationDialog(
+            itemType = "note",
+            selectedCount = state.selectedNoteIds.size,
+            warningMessage = "This action cannot be undone.",
+            isDeleting = state.isDeletingBatch,
+            onConfirm = {
+                onBulkDeleteSelected { _, _ ->
+                    showBulkDeleteDialog = false
+                }
+            },
+            onDismiss = {
+                if (!state.isDeletingBatch) showBulkDeleteDialog = false
+            }
+        )
     }
 
     // Delete Confirmation Dialog
@@ -375,47 +420,13 @@ private fun NotesContent(
 
 @Composable
 private fun NotesHeader(notesCount: Int) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "የግል ማስታወሻ",
-                style = MaterialTheme.typography.labelSmall,
-                color = BrandGold,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "ማስታወሻዎች",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = BrandGreen
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "ሀሳብህንና አስፈላጊ መረጃዎችን እዚህ ይመዝግቡ።",
-                style = MaterialTheme.typography.bodyMedium,
-                color = BrandGreen.copy(alpha = 0.6f)
-            )
+    ScreenHeaderBanner(
+        title = "Notes",
+        subtitle = "Keep important information and reminders.",
+        illustration = {
+            NotesHeaderIllustration()
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Surface(
-            color = Color(0xFFE2F0F9),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text(
-                text = "$notesCount notes",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2980B9)
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -432,73 +443,75 @@ private fun NoteInputCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.08f)),
+        color = PureWhiteSurface,
+        border = BorderStroke(1.dp, BorderDivider),
         shadowElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = LightMint,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.EditNote,
+                                contentDescription = null,
+                                tint = EmeraldGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "NEW NOTE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = BrandGold,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (editingNote != null) "Edit note" else "Write a note",
+                        text = if (editingNote != null) "Edit note" else "Write a new note",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = BrandGreen
+                        color = BrandNavy
                     )
                 }
 
                 if (editingNote != null) {
                     TextButton(onClick = onCancel) {
-                        Text("ሰርዝ", color = BrandGreen)
+                        Text("ሰርዝ", color = ErrorColor, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Note",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = BrandGreen.copy(alpha = 0.7f)
-                )
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp),
-                    placeholder = {
-                        Text(
-                            "Write down an idea or important information...",
-                            color = BrandGreen.copy(alpha = 0.35f),
-                            fontSize = 14.sp
-                        )
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandGreen,
-                        unfocusedBorderColor = BrandGreen.copy(alpha = 0.2f),
-                        focusedContainerColor = CreamSurface,
-                        unfocusedContainerColor = CreamSurface,
-                        cursorColor = BrandGreen
-                    ),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
-                )
-            }
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 100.dp),
+                placeholder = {
+                    Text(
+                        "Enter your note...",
+                        color = TextSecondary.copy(alpha = 0.5f),
+                        fontSize = 14.sp
+                    )
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = EmeraldGreen,
+                    unfocusedBorderColor = BorderDivider,
+                    focusedContainerColor = OffWhiteBg,
+                    unfocusedContainerColor = OffWhiteBg,
+                    cursorColor = EmeraldGreen,
+                    focusedTextColor = BrandNavy,
+                    unfocusedTextColor = BrandNavy
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
+            )
 
             Button(
                 onClick = {
@@ -511,9 +524,9 @@ private fun NoteInputCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2C5E6B),
+                    containerColor = EmeraldGreen,
                     contentColor = Color.White
                 )
             ) {
@@ -524,11 +537,22 @@ private fun NoteInputCard(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text(
-                        text = if (editingNote != null) "Update note" else "Save note",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (editingNote != null) "Update note" else "Save note",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -540,7 +564,10 @@ private fun NoteCardItem(
     note: CustomerNote,
     onClick: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isSelected: Boolean = false,
+    isSelectionActive: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null
 ) {
     val heading = note.note.lineSequence().firstOrNull()?.trim() ?: "ያልተሰየመ ማስታወሻ"
     val preview = note.note.lineSequence().drop(1).joinToString(" ").trim().ifEmpty { heading }
@@ -549,10 +576,19 @@ private fun NoteCardItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = CreamSurface,
-        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.06f)),
+            .clickable(onClick = {
+                if (isSelectionActive && onToggleSelect != null) {
+                    onToggleSelect()
+                } else {
+                    onClick()
+                }
+            }),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) LightMint.copy(alpha = 0.5f) else PureWhiteSurface,
+        border = BorderStroke(
+            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) EmeraldGreen else BorderDivider
+        ),
         shadowElevation = 1.dp
     ) {
         Column(
@@ -562,14 +598,25 @@ private fun NoteCardItem(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                if (onToggleSelect != null) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = EmeraldGreen,
+                            uncheckedColor = TextSecondary.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = heading,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = BrandGreen,
+                        color = BrandNavy,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -578,20 +625,20 @@ private fun NoteCardItem(
                         Text(
                             text = preview,
                             style = MaterialTheme.typography.bodySmall,
-                            color = BrandGreen.copy(alpha = 0.7f),
+                            color = TextSecondary,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Three-dots menu hidden on the rightmost
+                // Three-dots menu
                 Box {
                     IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "Options",
-                            tint = BrandGreen.copy(alpha = 0.5f),
+                            tint = TextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -605,7 +652,7 @@ private fun NoteCardItem(
                                 menuExpanded = false
                                 onEdit()
                             },
-                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = BrandGreen) }
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = EmeraldGreen) }
                         )
                         DropdownMenuItem(
                             text = { Text("ሰርዝ (Delete)", color = ErrorColor) },
@@ -627,7 +674,7 @@ private fun NoteCardItem(
                 Text(
                     text = "${note.authorName} • ${note.date} ${note.time}".trim(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = BrandGreen.copy(alpha = 0.5f)
+                    color = TextSecondary.copy(alpha = 0.8f)
                 )
             }
         }

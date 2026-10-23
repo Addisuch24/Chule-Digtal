@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { connectSocket } from "../services/socket";
+import "../layouts/MainLayout.css";
 
 function Login() {
   const navigate = useNavigate();

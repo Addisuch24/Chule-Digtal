@@ -23,8 +23,10 @@ sealed interface DashboardUiState {
         val ordersCount: Int,
         val customersCount: Int,
         val currentBalance: Double,
-        val recentOrders: List<DashboardRecentOrder>,
-        val recentNotes: List<DashboardRecentNote>
+        val totalDebit: Double = 0.0,
+        val totalCredit: Double = 0.0,
+        val recentOrders: List<DashboardRecentOrder> = emptyList(),
+        val recentNotes: List<DashboardRecentNote> = emptyList()
     ) : DashboardUiState
 
     data class Error(val message: String) : DashboardUiState

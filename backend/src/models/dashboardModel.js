@@ -2,7 +2,7 @@
 
 async function getDashboardSummary(userId) {
   const [[customerCount]] = await pool.execute(`
-    SELECT COUNT(*) AS total
+    SELECT COUNT(DISTINCT LOWER(TRIM(full_name))) AS total
     FROM customers
   `);
 
@@ -52,10 +52,10 @@ const [[customerBalanceSummary]] = await pool.execute(`
   SELECT
     SUM(
       CASE
-        WHEN balance > 0 THEN 1
+        WHEN balance < 0 THEN 1
         ELSE 0
       END
-    ) AS customers_with_balance,
+    ) AS customers_with_debt,
 
     SUM(
       CASE
@@ -66,13 +66,13 @@ const [[customerBalanceSummary]] = await pool.execute(`
 
     SUM(
       CASE
-        WHEN balance < 0 THEN 1
+        WHEN balance > 0 THEN 1
         ELSE 0
       END
     ) AS customers_with_credit
   FROM (
     SELECT
-      c.id,
+      LOWER(TRIM(c.full_name)) AS normalized_name,
       COALESCE(
         SUM(
           CASE
@@ -92,9 +92,29 @@ const [[customerBalanceSummary]] = await pool.execute(`
     FROM customers c
     LEFT JOIN financial_movements fm
       ON fm.customer_id = c.id
-    GROUP BY c.id
+    GROUP BY LOWER(TRIM(c.full_name))
   ) AS customer_balances
 `);
+
+  const [orderStatusRows] = await pool.execute(`
+    SELECT order_status, COUNT(*) AS total
+    FROM orders
+    GROUP BY order_status
+  `);
+
+  const orderStatusBreakdown = {
+    PENDING: 0,
+    CONFIRMED: 0,
+    PROCESSING: 0,
+    READY: 0,
+    COMPLETED: 0,
+    CANCELLED: 0,
+  };
+  orderStatusRows.forEach((row) => {
+    if (row.order_status) {
+      orderStatusBreakdown[row.order_status] = Number(row.total);
+    }
+  });
 
   const [[recentOrders]] = await pool.execute(`
     SELECT COUNT(*) AS total
@@ -144,6 +164,7 @@ const [recentOrdersList] = await pool.execute(`
     o.customer_id,
     c.full_name AS customer_name,
     o.title,
+    o.order_status,
     o.created_at
   FROM orders o
   LEFT JOIN customers c
@@ -170,25 +191,26 @@ const [[myActivityCount]] = await pool.execute(`
   FROM activities
   WHERE actor_id = ?
 `, [userId]);
+
+  const totalDebit = Number(financialSummary.total_debit || 0);
+  const totalCredit = Number(financialSummary.total_credit || 0);
+  const netBalance = totalCredit - totalDebit;
+
   return {
     myActivity: {
-  total: Number(myActivityCount.total),
-},
+      total: Number(myActivityCount.total),
+    },
     customers: {
-  total: Number(customerCount.total),
-  withBalance: Number(
-    customerBalanceSummary.customers_with_balance || 0
-  ),
-  settled: Number(
-    customerBalanceSummary.settled_customers || 0
-  ),
-  withCredit: Number(
-    customerBalanceSummary.customers_with_credit || 0
-  ),
-},
+      total: Number(customerCount.total),
+      withDebt: Number(customerBalanceSummary.customers_with_debt || 0),
+      withBalance: Number(customerBalanceSummary.customers_with_debt || 0) + Number(customerBalanceSummary.customers_with_credit || 0),
+      settled: Number(customerBalanceSummary.settled_customers || 0),
+      withCredit: Number(customerBalanceSummary.customers_with_credit || 0),
+    },
     orders: {
       total: Number(totalOrders.total),
       recent: Number(recentOrders.total),
+      statusBreakdown: orderStatusBreakdown,
     },
     notes: {
       total: Number(totalNotes.total),
@@ -196,27 +218,21 @@ const [[myActivityCount]] = await pool.execute(`
     financialMovements: {
       pending: Number(pendingFinancialMovements.total),
       recentPayments: Number(recentPayments.total),
-      summary: financialSummary[0],
+      totalDebit,
+      totalCredit,
+      balance: netBalance,
     },
     notifications: {
       unread: Number(unreadNotifications.total),
     },
+    recentOrders: recentOrdersList,
+    recentNotes: recentNotesList,
     activities: {
       recent: recentActivities,
       recentOrders: recentOrdersList,
       recentNotes: recentNotesList,
     },
-    financialMovements: {
-  pending: Number(pendingFinancialMovements.total),
-  recentPayments: Number(recentPayments.total),
-  totalDebit: Number(financialSummary.total_debit),
-  totalCredit: Number(financialSummary.total_credit),
-  balance:
-  Number(financialSummary.total_credit) -
-  Number(financialSummary.total_debit),
-},
   };
-  
 }
 
 module.exports = {

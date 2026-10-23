@@ -24,8 +24,18 @@ function emitToUsers(userIds, event, data) {
   }
 }
 
+function emitToAll(event, data) {
+  if (!io) {
+    console.warn("Socket.IO has not been initialized");
+    return;
+  }
+
+  io.emit(event, data);
+}
+
 module.exports = {
   initializeSocket,
   emitToUser,
   emitToUsers,
+  emitToAll,
 };

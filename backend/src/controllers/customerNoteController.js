@@ -110,7 +110,103 @@ async function getCustomerNotes(req, res) {
   }
 }
 
+async function deleteCustomerNote(req, res) {
+  try {
+    const { noteId } = req.params;
+
+    if (!/^\d+$/.test(noteId) || Number(noteId) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "noteId must be a valid note ID",
+      });
+    }
+
+    const deleted = await customerNoteModel.deleteCustomerNote(Number(noteId));
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer note not found",
+      });
+    }
+
+    await activityService.recordActivity({
+      actorId: Number(req.user.id),
+      activityType: "CUSTOMER_NOTE_DELETED",
+      entityType: "CUSTOMER_NOTE",
+      entityId: Number(noteId),
+      description: "A customer note was deleted",
+      metadata: { noteId: Number(noteId) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer note deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete customer note error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete customer note",
+    });
+  }
+}
+
+async function deleteCustomerNotes(req, res) {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "An array of note IDs ('ids') is required",
+      });
+    }
+
+    const validIds = ids
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid note IDs provided",
+      });
+    }
+
+    const result = await customerNoteModel.deleteCustomerNotes(validIds);
+
+    if (result.deletedCount > 0) {
+      await activityService.recordActivity({
+        actorId: Number(req.user.id),
+        activityType: "CUSTOMER_NOTE_BULK_DELETED",
+        entityType: "CUSTOMER_NOTE",
+        entityId: validIds[0],
+        description: `${result.deletedCount} customer notes were deleted`,
+        metadata: {
+          deletedCount: result.deletedCount,
+          noteIds: validIds,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} customer notes deleted successfully`,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Bulk delete customer notes error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete customer notes",
+    });
+  }
+}
+
 module.exports = {
   createCustomerNote,
   getCustomerNotes,
+  deleteCustomerNote,
+  deleteCustomerNotes,
 };
