@@ -178,19 +178,19 @@ async function markNotificationAsRead(req, res) {
     const existingNotification =
       await notificationModel.getNotificationById(notificationId);
 
-if (!existingNotification) {
-  return res.status(404).json({
-    success: false,
-    message: "Notification not found",
-  });
-}
+    if (!existingNotification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
 
-if (existingNotification.recipient_id !== req.user.id) {
-  return res.status(403).json({
-    success: false,
-    message: "You are not allowed to modify this notification",
-  });
-}
+    if (existingNotification.recipient_id !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to modify this notification",
+      });
+    }
 
     const notification =
       await notificationModel.markNotificationAsRead(
@@ -357,4 +357,4 @@ module.exports = {
   getUnreadNotificationCount,
   deleteNotification,
   deleteNotifications,
-};
+};
