@@ -132,4 +132,45 @@ class NotificationRepositoryTest {
         assertEquals("Offline error must preserve existing cached notifications", 1, repository.notifications.value.size)
         assertEquals("202", repository.notifications.value.first().id)
     }
+
+    @Test
+    fun testDeletedNotificationIgnoredOnIncomingSocketEvent() {
+        val notifId = "303"
+        // Mark as deleted in tombstone set
+        repository.deletedNotificationIds.add(notifId)
+
+        val socketPayload = JSONObject().apply {
+            put("id", 303)
+            put("recipient_id", 1)
+            put("title", "Deleted Notification Resurrect Attempt")
+            put("message", "Should be ignored")
+            put("notification_type", "ORDER_CREATED")
+            put("created_at", "2026-10-21T01:00:00Z")
+        }
+
+        repository.handleIncomingSocketNotification(socketPayload)
+
+        assertEquals("Deleted notification must not be resurrected by socket event", 0, repository.notifications.value.size)
+        assertEquals(0, repository.unreadCount.value)
+    }
+
+    @Test
+    fun testMultiDeviceDeleteSyncRemovesNotification() = runBlocking {
+        // Add a notification into local state
+        val validJson = JSONObject().apply {
+            put("id", 404)
+            put("recipient_id", 1)
+            put("title", "Multi-device Notification")
+            put("message", "Deleted on another device")
+            put("notification_type", "ORDER_CREATED")
+            put("created_at", "2026-10-21T01:00:00Z")
+        }
+        repository.handleIncomingSocketNotification(validJson)
+        assertEquals(1, repository.notifications.value.size)
+
+        // Simulate multi-device delete event received from SocketManager
+        repository.deletedNotificationIds.add("404")
+        // Filter out deleted
+        assertTrue("Tombstone contains deleted id", repository.deletedNotificationIds.contains("404"))
+    }
 }

@@ -20,6 +20,15 @@ class SocketManager(private val baseUrl: String) {
     private val _notificationsFlow = MutableSharedFlow<JSONObject>(replay = 0, extraBufferCapacity = 64)
     val notificationsFlow: SharedFlow<JSONObject> = _notificationsFlow.asSharedFlow()
 
+    private val _notificationDeletedFlow = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 64)
+    val notificationDeletedFlow: SharedFlow<String> = _notificationDeletedFlow.asSharedFlow()
+
+    private val _notificationBulkDeletedFlow = MutableSharedFlow<List<String>>(replay = 0, extraBufferCapacity = 64)
+    val notificationBulkDeletedFlow: SharedFlow<List<String>> = _notificationBulkDeletedFlow.asSharedFlow()
+
+    private val _notificationAllDeletedFlow = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 64)
+    val notificationAllDeletedFlow: SharedFlow<Unit> = _notificationAllDeletedFlow.asSharedFlow()
+
     private val _dashboardRefreshFlow = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 64)
     val dashboardRefreshFlow: SharedFlow<Unit> = _dashboardRefreshFlow.asSharedFlow()
 
@@ -90,6 +99,35 @@ class SocketManager(private val baseUrl: String) {
                     logDebug("SocketManager", "Received notification: $data")
                     _notificationsFlow.tryEmit(data)
                 }
+            }
+
+            socket?.on("notification:deleted") { args ->
+                val data = args.firstOrNull() as? JSONObject
+                val id = data?.optString("notificationId", data.optString("id", ""))
+                if (!id.isNullOrBlank()) {
+                    logDebug("SocketManager", "Received notification:deleted for $id")
+                    _notificationDeletedFlow.tryEmit(id)
+                }
+            }
+
+            socket?.on("notification:bulk_deleted") { args ->
+                val data = args.firstOrNull() as? JSONObject
+                val idsArray = data?.optJSONArray("notificationIds") ?: data?.optJSONArray("ids")
+                val idsList = mutableListOf<String>()
+                if (idsArray != null) {
+                    for (i in 0 until idsArray.length()) {
+                        idsList.add(idsArray.optString(i))
+                    }
+                }
+                if (idsList.isNotEmpty()) {
+                    logDebug("SocketManager", "Received notification:bulk_deleted for $idsList")
+                    _notificationBulkDeletedFlow.tryEmit(idsList)
+                }
+            }
+
+            socket?.on("notification:all_deleted") {
+                logDebug("SocketManager", "Received notification:all_deleted")
+                _notificationAllDeletedFlow.tryEmit(Unit)
             }
 
             // Real-time dashboard refresh and customer change events

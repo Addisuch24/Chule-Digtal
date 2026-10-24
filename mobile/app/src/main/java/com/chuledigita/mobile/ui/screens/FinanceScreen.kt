@@ -53,7 +53,7 @@ fun FinanceScreen(
 
     MainScaffold(
         navController = navController,
-        title = "ፋይናንስ",
+        title = "Customer Balance",
         onLogout = onLogout
     ) { paddingValues ->
         Box(
@@ -94,6 +94,8 @@ fun FinanceScreen(
                         onDelete = viewModel::deleteMovement,
                         onUpdate = viewModel::updateMovement,
                         onDeleteCustomer = viewModel::deleteCustomer,
+                        onUpdateCustomer = viewModel::updateCustomer,
+                        onSettleCustomer = viewModel::settleCustomer,
                         onClearMessages = viewModel::clearMessages
                     )
                 }
@@ -112,6 +114,8 @@ fun FinanceContent(
     onDelete: (String) -> Unit,
     onUpdate: (String, String, Double, String) -> Unit,
     onDeleteCustomer: (String, String) -> Unit,
+    onUpdateCustomer: (String, String, String?) -> Unit = { _, _, _ -> },
+    onSettleCustomer: (String, Double, Boolean) -> Unit = { _, _, _ -> },
     onClearMessages: () -> Unit
 ) {
     LazyColumn(
@@ -129,8 +133,9 @@ fun FinanceContent(
             val totalCredit = state.customersWithCredit.sumOf { it.balance }
             val netBalance = totalCredit - totalDebit
             val isNegative = netBalance < 0
-            val balancePrefix = if (netBalance > 0) "+ " else if (isNegative) "− " else ""
-            val balanceColor = if (isNegative) ErrorColor else EmeraldGreen
+            val isPositive = netBalance > 0
+            val balancePrefix = if (isPositive) "+ " else if (isNegative) "− " else ""
+            val balanceColor = if (isPositive) BalancePositiveBlue else if (isNegative) BalanceNegativeRed else BalanceDarkText
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -147,14 +152,14 @@ fun FinanceContent(
                     modifier = Modifier.weight(1f),
                     title = "Total Debit",
                     value = "− ${totalDebit.toInt()} ETB",
-                    valueColor = ErrorColor,
+                    valueColor = BalanceNegativeRed,
                     isPositive = false
                 )
                 FinanceMetricMiniCard(
                     modifier = Modifier.weight(1f),
                     title = "Total Credit",
                     value = "+ ${totalCredit.toInt()} ETB",
-                    valueColor = EmeraldGreen,
+                    valueColor = BalancePositiveBlue,
                     isPositive = true
                 )
             }
@@ -214,7 +219,7 @@ fun FinanceContent(
                         )
                     }
 
-                    if (state.customersWhoOwe.isEmpty() && state.customersWithCredit.isEmpty()) {
+                    if (state.customersWhoOwe.isEmpty() && state.customersWithCredit.isEmpty() && state.customersSettled.isEmpty()) {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.Info, contentDescription = null, tint = BrandGreen.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
@@ -223,29 +228,29 @@ fun FinanceContent(
                             }
                         }
                     } else {
-                        // Stacked vertically for mobile screens: Debtors above, Creditors below
+                        // Stacked vertically for mobile screens: Debtors above, Creditors middle, Settled below
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            // Customers who owe (Debtors)
+                            // Customers who owe (Debtors) - Tebedruwal
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                                     Surface(
-                                        color = ErrorColor.copy(alpha = 0.1f),
+                                        color = BalanceNegativeBg,
                                         shape = CircleShape,
                                         modifier = Modifier.size(26.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Remove, contentDescription = null, tint = ErrorColor, modifier = Modifier.size(14.dp))
+                                            Icon(Icons.Default.Remove, contentDescription = null, tint = BalanceNegativeRed, modifier = Modifier.size(14.dp))
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "ዕዳ ያለባቸው ደንበኞች",
+                                        text = "ዕዳ ያለባቸው ደንበኞች — ተበድሩዋል (Tebedruwal)",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = ErrorColor
+                                        color = BalanceNegativeRed
                                     )
                                 }
 
@@ -253,14 +258,14 @@ fun FinanceContent(
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(12.dp),
-                                        color = CreamSurface,
-                                        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.05f))
+                                        color = PureWhiteSurface,
+                                        border = BorderStroke(1.dp, BalanceZeroBorder)
                                     ) {
                                         Text(
                                             text = "ምንም ዕዳ የለም",
                                             modifier = Modifier.padding(16.dp),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = BrandGreen.copy(alpha = 0.4f),
+                                            color = TextSecondary,
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -270,30 +275,32 @@ fun FinanceContent(
                                             balance = balance,
                                             onDelete = onDelete,
                                             onUpdate = onUpdate,
-                                            onDeleteCustomer = onDeleteCustomer
+                                            onDeleteCustomer = onDeleteCustomer,
+                                            onUpdateCustomer = onUpdateCustomer,
+                                            onSettleCustomer = onSettleCustomer
                                         )
                                     }
                                 }
                             }
 
-                            // Customers with credit (Creditors)
+                            // Customers with credit (Creditors) - Ker Hisab
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                                     Surface(
-                                        color = SuccessColor.copy(alpha = 0.1f),
+                                        color = BalancePositiveBg,
                                         shape = CircleShape,
                                         modifier = Modifier.size(26.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Default.Add, contentDescription = null, tint = SuccessColor, modifier = Modifier.size(14.dp))
+                                            Icon(Icons.Default.Add, contentDescription = null, tint = BalancePositiveBlue, modifier = Modifier.size(14.dp))
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "ቀሪ ብር ያላቸው ደንበኞች",
+                                        text = "ቀሪ ብር ያላቸው ደንበኞች — ቀር ሂሳብ (Ker Hisab)",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = SuccessColor
+                                        color = BalancePositiveBlue
                                     )
                                 }
 
@@ -301,14 +308,14 @@ fun FinanceContent(
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(12.dp),
-                                        color = CreamSurface,
-                                        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.05f))
+                                        color = PureWhiteSurface,
+                                        border = BorderStroke(1.dp, BalanceZeroBorder)
                                     ) {
                                         Text(
                                             text = "ምንም ቀሪ ሂሳብ የለም",
                                             modifier = Modifier.padding(16.dp),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = BrandGreen.copy(alpha = 0.4f),
+                                            color = TextSecondary,
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -318,7 +325,45 @@ fun FinanceContent(
                                             balance = balance,
                                             onDelete = onDelete,
                                             onUpdate = onUpdate,
-                                            onDeleteCustomer = onDeleteCustomer
+                                            onDeleteCustomer = onDeleteCustomer,
+                                            onUpdateCustomer = onUpdateCustomer,
+                                            onSettleCustomer = onSettleCustomer
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Settled Accounts - Kefluwal / Tekebluwal / Settled
+                            if (state.customersSettled.isNotEmpty()) {
+                                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                                        Surface(
+                                            color = BalanceSettledBg,
+                                            shape = CircleShape,
+                                            border = BorderStroke(1.dp, BalanceZeroBorder),
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = BalanceSettledText, modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "የተስተካከሉ ሂሳቦች (Settled Accounts)",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BalanceSettledText
+                                        )
+                                    }
+
+                                    state.customersSettled.forEach { balance ->
+                                        CustomerBalanceItem(
+                                            balance = balance,
+                                            onDelete = onDelete,
+                                            onUpdate = onUpdate,
+                                            onDeleteCustomer = onDeleteCustomer,
+                                            onUpdateCustomer = onUpdateCustomer,
+                                            onSettleCustomer = onSettleCustomer
                                         )
                                     }
                                 }
@@ -336,7 +381,7 @@ fun FinanceContent(
 @Composable
 fun FinanceHeader(movementCount: Int) {
     ScreenHeaderBanner(
-        title = "Finance",
+        title = "Customer Balance",
         subtitle = "Track income, expenses and keep your balance healthy.",
         illustration = {
             FinanceHeaderIllustration()
@@ -368,7 +413,7 @@ private fun FinanceMetricMiniCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Surface(
-                    color = if (isPositive) LightMint else ErrorColor.copy(alpha = 0.1f),
+                    color = if (isPositive) BalancePositiveBg else BalanceNegativeBg,
                     shape = CircleShape,
                     modifier = Modifier.size(20.dp)
                 ) {
@@ -376,7 +421,7 @@ private fun FinanceMetricMiniCard(
                         Icon(
                             imageVector = if (isPositive) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                             contentDescription = null,
-                            tint = if (isPositive) EmeraldGreen else ErrorColor,
+                            tint = if (isPositive) BalancePositiveBlue else BalanceNegativeRed,
                             modifier = Modifier.size(12.dp)
                         )
                     }
@@ -559,16 +604,37 @@ fun CustomerBalanceItem(
     balance: CustomerBalance,
     onDelete: (String) -> Unit,
     onUpdate: (String, String, Double, String) -> Unit,
-    onDeleteCustomer: (String, String) -> Unit = { _, _ -> }
+    onDeleteCustomer: (String, String) -> Unit = { _, _ -> },
+    onUpdateCustomer: (String, String, String?) -> Unit = { _, _, _ -> },
+    onSettleCustomer: (String, Double, Boolean) -> Unit = { _, _, _ -> }
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteCustomerConfirm by remember { mutableStateOf(false) }
+    var showSettleConfirm by remember { mutableStateOf(false) }
+    var showEditCustomerDialog by remember { mutableStateOf(false) }
+    var editName by remember(balance.customerName) { mutableStateOf(balance.customerName) }
+    var editPhone by remember(balance.customerPhone) { mutableStateOf(balance.customerPhone ?: "") }
+
+    val isPositive = balance.balance > 0.0
+    val isNegative = balance.balance < 0.0
+
+    val cardBg = when {
+        isPositive -> BalancePositiveBg
+        isNegative -> BalanceNegativeBg
+        else -> BalanceZeroBg
+    }
+    val cardBorder = when {
+        isPositive -> BorderStroke(1.dp, BalancePositiveBlue.copy(alpha = 0.35f))
+        isNegative -> BorderStroke(1.dp, BalanceNegativeRed.copy(alpha = 0.35f))
+        else -> BorderStroke(1.dp, BalanceZeroBorder)
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = CreamSurface,
-        border = BorderStroke(1.dp, BrandGreen.copy(alpha = 0.06f)),
+        color = cardBg,
+        border = cardBorder,
         shadowElevation = 1.dp
     ) {
         Column {
@@ -578,38 +644,140 @@ fun CustomerBalanceItem(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = balance.customerName, fontWeight = FontWeight.Bold, color = BrandGreen)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(text = balance.customerName, fontWeight = FontWeight.Bold, color = BalanceDarkText)
+
+                        val (badgeBg, badgeTextColor, badgeBorder) = when (balance.status.type) {
+                            BalanceStatusType.TEBEDRUWAL -> Triple(
+                                BalanceNegativeBg,
+                                BalanceNegativeRed,
+                                BalanceNegativeRed.copy(alpha = 0.35f)
+                            )
+                            BalanceStatusType.KER_HISAB -> Triple(
+                                BalancePositiveBg,
+                                BalancePositiveBlue,
+                                BalancePositiveBlue.copy(alpha = 0.35f)
+                            )
+                            else -> Triple(
+                                BalanceSettledBg,
+                                BalanceSettledText,
+                                BalanceZeroBorder
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(99.dp),
+                            color = badgeBg,
+                            border = BorderStroke(1.dp, badgeBorder)
+                        ) {
+                            Text(
+                                text = balance.status.amharicLabel,
+                                color = badgeTextColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                     if (balance.customerPhone != null) {
-                        Text(text = balance.customerPhone, style = MaterialTheme.typography.bodySmall, color = BrandGreen.copy(alpha = 0.5f))
+                        Text(text = balance.customerPhone, style = MaterialTheme.typography.bodySmall, color = BalanceDarkText.copy(alpha = 0.65f))
                     }
                 }
 
-                val color = if (balance.balance < 0) ErrorColor else SuccessColor
-                val prefix = if (balance.balance < 0) "-" else "+"
+                val balanceColor = when {
+                    isNegative -> BalanceNegativeRed
+                    isPositive -> BalancePositiveBlue
+                    else -> BalanceDarkText
+                }
+                val prefix = when {
+                    isNegative -> "− "
+                    isPositive -> "+ "
+                    else -> ""
+                }
                 Text(
-                    text = "$prefix ${kotlin.math.abs(balance.balance).toInt()} ETB",
-                    color = color,
+                    text = "$prefix${kotlin.math.abs(balance.balance).toInt()} ETB",
+                    color = balanceColor,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp)
                 )
 
-                IconButton(
-                    onClick = { showDeleteCustomerConfirm = true },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "ደንበኛውን ሰርዝ",
-                        tint = ErrorColor.copy(alpha = 0.6f),
-                        modifier = Modifier.size(16.dp)
-                    )
+                // Rightmost Action Button with Dropdown Menu (Edit, Delete, Settle)
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "ተጨማሪ አማራጮች",
+                                tint = Color(0xFF1E293B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        if (balance.balance != 0.0) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (balance.balance < 0) "ክፍያ መዝግብ (ከፍለዋል)" else "ቀሪ ብር አስረክብ (ተቀብለዋል)"
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Payment,
+                                        contentDescription = null,
+                                        tint = if (balance.balance < 0) SuccessColor else BrandNavy
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showSettleConfirm = true
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("ደንበኛ አርትዕ (Edit)") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Edit, contentDescription = null, tint = BrandGreen)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                showEditCustomerDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("ደንበኛ ሰርዝ (Delete)", color = ErrorColor) },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Delete, contentDescription = null, tint = ErrorColor)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                showDeleteCustomerConfirm = true
+                            }
+                        )
+                    }
                 }
 
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = BrandGreen.copy(alpha = 0.3f),
+                    tint = BalanceDarkText.copy(alpha = 0.45f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -623,6 +791,67 @@ fun CustomerBalanceItem(
                         showDeleteCustomerConfirm = false
                     },
                     onDismiss = { showDeleteCustomerConfirm = false }
+                )
+            }
+
+            if (showSettleConfirm) {
+                val isDebt = balance.balance < 0
+                val absAmount = kotlin.math.abs(balance.balance).toInt()
+                ConfirmDialog(
+                    title = if (isDebt) "የዕዳ ክፍያ ማስተካከል" else "የቀሪ ብር ማስተካከል",
+                    message = if (isDebt)
+                        "ለ '${balance.customerName}' የ $absAmount ብር ክፍያ መዝግበው ዕዳውን ማስተካከል ይፈልጋሉ? ሁኔታው ወደ 'ከፍለዋል (Kefluwal)' ይቀየራል።"
+                    else
+                        "ለ '${balance.customerName}' የ $absAmount ብር ቀሪ ሂሳብ ተከፍሎ ማስተካከል ይፈልጋሉ? ሁኔታው ወደ 'ተቀብለዋል (Tekebluwal)' ይቀየራል።",
+                    onConfirm = {
+                        onSettleCustomer(balance.customerId, kotlin.math.abs(balance.balance), isDebt)
+                        showSettleConfirm = false
+                    },
+                    onDismiss = { showSettleConfirm = false }
+                )
+            }
+
+            if (showEditCustomerDialog) {
+                AlertDialog(
+                    onDismissRequest = { showEditCustomerDialog = false },
+                    title = { Text("ደንበኛ አርትዕ (Edit Customer)", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = editName,
+                                onValueChange = { editName = it },
+                                label = { Text("ስም") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = editPhone,
+                                onValueChange = { editPhone = it },
+                                label = { Text("ስልክ ቁጥር (አማራጭ)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (editName.isNotBlank()) {
+                                    onUpdateCustomer(balance.customerId, editName.trim(), editPhone.trim().ifBlank { null })
+                                    showEditCustomerDialog = false
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandGreen)
+                        ) {
+                            Text("አስቀምጥ")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEditCustomerDialog = false }) {
+                            Text("ሰርዝ")
+                        }
+                    }
                 )
             }
 
@@ -677,43 +906,51 @@ fun MovementRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = movement.description, style = MaterialTheme.typography.bodyMedium, color = BrandGreen)
+            Text(text = movement.description, style = MaterialTheme.typography.bodyMedium, color = BalanceDarkText)
             Spacer(modifier = Modifier.height(2.dp))
             // Labeled by who took the action and date/time
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = BrandGreen.copy(alpha = 0.4f), modifier = Modifier.size(12.dp))
+                Icon(Icons.Default.Person, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(12.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "በ ${movement.recordedBy}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = BrandGreen.copy(alpha = 0.5f)
+                    color = TextSecondary
                 )
                 Text(
                     text = " • ${movement.date}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = BrandGreen.copy(alpha = 0.5f)
+                    color = TextSecondary
                 )
             }
         }
 
-        val amountColor = if (movement.type == MovementType.DEBIT) ErrorColor else SuccessColor
-        val sign = if (movement.type == MovementType.DEBIT) "-" else "+"
+        val amountColor = if (movement.type == MovementType.DEBIT) BalanceNegativeRed else BalancePositiveBlue
+        val sign = if (movement.type == MovementType.DEBIT) "− " else "+ "
         Text(
-            text = "$sign ${movement.amount.toInt()} ETB",
+            text = "$sign${movement.amount.toInt()} ETB",
             color = amountColor,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 8.dp)
         )
 
-        // Three-dots menu hidden on the rightmost
+        // Three-dots menu prominently displayed
         Box {
-            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Options",
-                    tint = BrandGreen.copy(alpha = 0.5f),
-                    modifier = Modifier.size(18.dp)
-                )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                shadowElevation = 1.dp,
+                modifier = Modifier.size(30.dp)
+            ) {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = Color(0xFF1E293B),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
             DropdownMenu(
                 expanded = menuExpanded,

@@ -223,6 +223,9 @@ interface ApiService {
     @DELETE("notifications/{notificationId}")
     suspend fun deleteNotification(@Path("notificationId") notificationId: Long): Response<Void>
 
+    @DELETE("notifications/all")
+    suspend fun deleteAllNotifications(): Response<Void>
+
     @POST("notifications/bulk-delete")
     suspend fun bulkDeleteNotifications(
         @Body request: BulkDeleteNotificationsRequest
@@ -230,7 +233,36 @@ interface ApiService {
 
     @GET("notifications/recipient/{recipientId}/unread-count")
     suspend fun getUnreadCount(@Path("recipientId") recipientId: Long): Response<UnreadCountResponse>
+
+    // ============================================================
+    // DEVICE REGISTRATION / PUSH NOTIFICATIONS
+    // ============================================================
+
+    @POST("device-tokens/register")
+    suspend fun registerDevice(@Body request: RegisterDeviceRequest): Response<DeviceRegistrationResponse>
+
+    @POST("device-tokens/logout")
+    suspend fun logoutDevice(@Body request: LogoutDeviceRequest): Response<DeviceRegistrationResponse>
+
+    @DELETE("device-tokens/{deviceToken}")
+    suspend fun unregisterDevice(@Path("deviceToken") deviceToken: String): Response<Void>
 }
+
+data class RegisterDeviceRequest(
+    val deviceToken: String,
+    val userId: Long? = null,
+    val platform: String = "android",
+    val receiveLoggedOut: Boolean = true
+)
+
+data class LogoutDeviceRequest(
+    val deviceToken: String
+)
+
+data class DeviceRegistrationResponse(
+    val success: Boolean,
+    val message: String
+)
 
 data class HealthResponse(
     val success: Boolean,

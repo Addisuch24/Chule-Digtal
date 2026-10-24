@@ -27,8 +27,32 @@ fun NoteDetailsScreen(
     val note = remember(noteId) { MockDataProvider.getMockNoteById(noteId) }
 
     if (note == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("ማስታወሻው አልተገኘም")
+        MainScaffold(
+            navController = navController,
+            title = "የማስታወሻ ዝርዝር",
+            showBottomBar = false
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = "ማስታወሻው አልተገኘም ወይም ተሰርዟል",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { navController.navigate(com.chuledigita.mobile.ui.navigation.Screen.Notes.route) }) {
+                        Text("ወደ ማስታወሻዎች ዝርዝር ተመለስ")
+                    }
+                }
+            }
         }
         return
     }

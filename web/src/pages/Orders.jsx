@@ -174,6 +174,33 @@ function Orders() {
     }
   }
 
+  async function handleToggleOrderStatus(order) {
+    const isCompleted = (order.order_status || order.orderStatus) === "COMPLETED";
+    const nextStatus = isCompleted ? "PENDING" : "COMPLETED";
+    setActionMessage("");
+    setActionError("");
+    try {
+      setBusyOrderId(order.id);
+      await api.patch(`/orders/${order.id}/status`, {
+        orderStatus: nextStatus,
+      });
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id ? { ...o, order_status: nextStatus, orderStatus: nextStatus } : o
+        )
+      );
+      setOpenMenuOrderId(null);
+      setActionMessage(`Order marked as ${nextStatus === "COMPLETED" ? "completed" : "pending"}.`);
+    } catch (requestError) {
+      console.error("Update order status error:", requestError);
+      setActionError(
+        requestError.response?.data?.message || "Could not update order status."
+      );
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
   async function handleDeleteOrder(order) {
     const orderTitle = order.title || order.order_number || `Order #${order.id}`;
     if (!window.confirm(`Delete "${orderTitle}"? This cannot be undone.`)) {
@@ -507,14 +534,27 @@ function Orders() {
                         aria-label={`Select order ${order.title || order.order_number || order.id}`}
                         style={{ cursor: "pointer", width: "18px", height: "18px", flexShrink: 0 }}
                       />
-                      <h3 style={{ flex: 1, margin: 0 }}>
-                        <Link to={`/orders/${order.id}`}>
-                          {order.title ||
-                            order.order_number ||
-                            order.orderNumber ||
-                            `Order #${order.id}`}
-                        </Link>
-                      </h3>
+                      {(() => {
+                        const isCompleted = (order.order_status || order.orderStatus) === "COMPLETED";
+                        return (
+                          <h3 style={{ flex: 1, margin: 0 }}>
+                            <Link
+                              to={`/orders/${order.id}`}
+                              style={{
+                                fontWeight: isCompleted ? "normal" : "700",
+                                color: isCompleted ? "rgba(220, 38, 38, 0.55)" : "#166534",
+                                textDecoration: isCompleted ? "line-through" : "none",
+                                transition: "color 0.2s, opacity 0.2s",
+                              }}
+                            >
+                              {order.title ||
+                                order.order_number ||
+                                order.orderNumber ||
+                                `Order #${order.id}`}
+                            </Link>
+                          </h3>
+                        );
+                      })()}
                       <div className="order-note-menu">
                         <button
                           className="order-menu-trigger"
@@ -528,10 +568,29 @@ function Orders() {
                             )
                           }
                         >
-                          &hellip;
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="12" cy="5" r="2.2" />
+                            <circle cx="12" cy="12" r="2.2" />
+                            <circle cx="12" cy="19" r="2.2" />
+                          </svg>
                         </button>
                         {openMenuOrderId === order.id && (
                           <div className="order-menu" role="menu">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="order-menu-toggle-status"
+                              onClick={() => handleToggleOrderStatus(order)}
+                              disabled={busyOrderId === order.id}
+                              style={{
+                                fontWeight: "600",
+                                color: (order.order_status || order.orderStatus) === "COMPLETED" ? "#d97706" : "#16a34a",
+                              }}
+                            >
+                              {(order.order_status || order.orderStatus) === "COMPLETED"
+                                ? "Mark as Pending"
+                                : "Mark as Completed"}
+                            </button>
                             <button
                               type="button"
                               role="menuitem"

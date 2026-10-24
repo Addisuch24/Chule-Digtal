@@ -199,6 +199,16 @@ class MultiSelectDeleteTest {
             _notifications.value = notifsList.toList()
             return Result.success(BulkDeleteData(deletedCount = notificationIds.size, deletedIds = notificationIds.map { it.toLong() }))
         }
+        override suspend fun deleteNotification(notificationId: String): Result<Unit> {
+            notifsList.removeAll { it.id == notificationId }
+            _notifications.value = notifsList.toList()
+            return Result.success(Unit)
+        }
+        override suspend fun deleteAllNotifications(): Result<Unit> {
+            notifsList.clear()
+            _notifications.value = emptyList()
+            return Result.success(Unit)
+        }
         override fun startRealTimeSync() {}
         override fun stopRealTimeSync() {}
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import socket, { connectSocket } from "../services/socket";
 import FeedbackState from "../components/FeedbackState";
@@ -61,6 +61,16 @@ function Notifications() {
     socket.connected ? "connected" : "connecting"
   );
 
+  const deletedNotificationIds = useRef(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 1,
+    hasMore: false,
+  });
+
   const unreadCount = useMemo(
     () =>
       notifications.filter(
@@ -69,7 +79,7 @@ function Notifications() {
     [notifications]
   );
 
-  const loadNotifications = useCallback(async (showSpinner = false) => {
+  const loadNotifications = useCallback(async (showSpinner = false, page = 1) => {
     try {
       if (showSpinner) setLoading(true);
       setError("");
@@ -80,11 +90,20 @@ function Notifications() {
         setLoading(false);
         return;
       }
-      const response = await api.get(`/notifications/recipient/${user.id}`);
+      const response = await api.get(`/notifications/recipient/${user.id}?page=${page}&limit=50`);
       const list = Array.isArray(response.data?.data)
         ? response.data.data
         : [];
-      setNotifications(list.map(normalizeNotification));
+      
+      const normalizedList = list
+        .map(normalizeNotification)
+        .filter((item) => !deletedNotificationIds.current.has(item.id) && !deletedNotificationIds.current.has(Number(item.id)));
+
+      setNotifications(normalizedList);
+      if (response.data?.pagination) {
+        setPagination(response.data.pagination);
+        setCurrentPage(response.data.pagination.page);
+      }
     } catch (requestError) {
       console.error("Load notifications error:", requestError);
       setError(
@@ -109,7 +128,22 @@ function Notifications() {
     }
     function handleNewNotification(notification) {
       console.log("REAL-TIME NOTIFICATION RECEIVED:", notification);
+      const storedUser = localStorage.getItem("user");
+      const user = storedUser ? JSON.parse(storedUser) : null;
+      const recipientId = notification.recipientId ?? notification.recipient_id;
+      if (user?.id && recipientId && Number(recipientId) !== Number(user.id)) {
+        return;
+      }
+
       const safeNotification = normalizeNotification(notification);
+      if (
+        safeNotification.id &&
+        (deletedNotificationIds.current.has(safeNotification.id) ||
+         deletedNotificationIds.current.has(Number(safeNotification.id)))
+      ) {
+        return;
+      }
+
       setNotifications((previousNotifications) =>
         safeNotification.id &&
         previousNotifications.some((item) => item.id === safeNotification.id)
@@ -118,19 +152,60 @@ function Notifications() {
       );
     }
 
+    function handleNotificationDeleted({ notificationId }) {
+      if (!notificationId) return;
+      deletedNotificationIds.current.add(Number(notificationId));
+      deletedNotificationIds.current.add(String(notificationId));
+      setNotifications((prev) =>
+        prev.filter((n) => n.id !== notificationId && Number(n.id) !== Number(notificationId))
+      );
+      setSelectedNotificationIds((prev) =>
+        prev.filter((id) => id !== notificationId && Number(id) !== Number(notificationId))
+      );
+    }
+
+    function handleNotificationBulkDeleted({ notificationIds }) {
+      if (!Array.isArray(notificationIds)) return;
+      notificationIds.forEach((id) => {
+        deletedNotificationIds.current.add(Number(id));
+        deletedNotificationIds.current.add(String(id));
+      });
+      setNotifications((prev) =>
+        prev.filter(
+          (n) => !notificationIds.includes(n.id) && !notificationIds.includes(Number(n.id))
+        )
+      );
+      setSelectedNotificationIds((prev) =>
+        prev.filter(
+          (id) => !notificationIds.includes(id) && !notificationIds.includes(Number(id))
+        )
+      );
+    }
+
+    function handleNotificationAllDeleted() {
+      setNotifications([]);
+      setSelectedNotificationIds([]);
+    }
+
     socket.on("connect", handleSocketConnect);
     socket.on("disconnect", handleSocketDisconnect);
     socket.on("connect_error", handleSocketError);
     socket.on("notification:new", handleNewNotification);
+    socket.on("notification:deleted", handleNotificationDeleted);
+    socket.on("notification:bulk_deleted", handleNotificationBulkDeleted);
+    socket.on("notification:all_deleted", handleNotificationAllDeleted);
 
     connectSocket();
-    loadNotifications();
+    loadNotifications(true, 1);
 
     return () => {
       socket.off("connect", handleSocketConnect);
       socket.off("disconnect", handleSocketDisconnect);
       socket.off("connect_error", handleSocketError);
       socket.off("notification:new", handleNewNotification);
+      socket.off("notification:deleted", handleNotificationDeleted);
+      socket.off("notification:bulk_deleted", handleNotificationBulkDeleted);
+      socket.off("notification:all_deleted", handleNotificationAllDeleted);
     };
   }, [loadNotifications]);
 
@@ -179,9 +254,16 @@ function Notifications() {
       setMessage("");
       setError("");
       await api.delete(`/notifications/${id}`);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      setSelectedNotificationIds((prev) => prev.filter((item) => item !== id));
+      deletedNotificationIds.current.add(id);
+      deletedNotificationIds.current.add(Number(id));
+      setNotifications((prev) =>
+        prev.filter((n) => n.id !== id && Number(n.id) !== Number(id))
+      );
+      setSelectedNotificationIds((prev) =>
+        prev.filter((item) => item !== id && Number(item) !== Number(id))
+      );
       setMessage("Notification deleted.");
+      await loadNotifications(false, currentPage);
     } catch (requestError) {
       console.error("Delete notification error:", requestError);
       setError(
@@ -205,20 +287,59 @@ function Notifications() {
       setDeleting(true);
       setMessage("");
       setError("");
-      await api.post("/notifications/bulk-delete", {
+      const response = await api.post("/notifications/bulk-delete", {
         notificationIds: selectedNotificationIds,
       });
+      const actuallyDeletedIds = response.data?.data?.deletedIds || selectedNotificationIds;
+      actuallyDeletedIds.forEach((id) => {
+        deletedNotificationIds.current.add(id);
+        deletedNotificationIds.current.add(Number(id));
+      });
       setNotifications((prev) =>
-        prev.filter((n) => !selectedNotificationIds.includes(n.id))
+        prev.filter(
+          (n) => !actuallyDeletedIds.includes(n.id) && !actuallyDeletedIds.includes(Number(n.id))
+        )
+      );
+      setSelectedNotificationIds((prev) =>
+        prev.filter(
+          (id) => !actuallyDeletedIds.includes(id) && !actuallyDeletedIds.includes(Number(id))
+        )
       );
       setMessage(
-        `Successfully deleted ${selectedNotificationIds.length} notification(s).`
+        `Successfully deleted ${actuallyDeletedIds.length} notification(s).`
       );
-      setSelectedNotificationIds([]);
+      await loadNotifications(false, currentPage);
     } catch (requestError) {
       console.error("Bulk delete notifications error:", requestError);
       setError(
         requestError.response?.data?.message || "Failed to delete notifications."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleClearAllNotifications() {
+    if (
+      !window.confirm(
+        "Are you sure you want to permanently delete ALL notifications? This will delete them from the database and cannot be undone."
+      )
+    ) {
+      return;
+    }
+    try {
+      setDeleting(true);
+      setMessage("");
+      setError("");
+      await api.delete("/notifications/all");
+      setNotifications([]);
+      setSelectedNotificationIds([]);
+      setMessage("All notifications permanently deleted.");
+      await loadNotifications(false, 1);
+    } catch (requestError) {
+      console.error("Delete all notifications error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to clear all notifications."
       );
     } finally {
       setDeleting(false);
@@ -277,6 +398,8 @@ function Notifications() {
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: "1rem",
+              flexWrap: "wrap",
+              gap: "0.5rem",
             }}
           >
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
@@ -292,6 +415,23 @@ function Notifications() {
               />
               <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Select all notifications</span>
             </label>
+            <button
+              type="button"
+              className="button button-secondary"
+              style={{
+                color: "#ef4444",
+                borderColor: "rgba(239, 68, 68, 0.4)",
+                padding: "0.35rem 0.8rem",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+              }}
+              onClick={handleClearAllNotifications}
+              disabled={deleting}
+            >
+              {deleting ? "Clearing..." : "Clear All Notifications"}
+            </button>
           </div>
 
           {selectedNotificationIds.length > 0 && (
@@ -402,6 +542,44 @@ function Notifications() {
               );
             })}
           </section>
+
+          {pagination.totalPages > 1 && (
+            <div
+              className="pagination-bar"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "1rem",
+                marginTop: "1.5rem",
+                background: "var(--color-surface, #ffffff)",
+                borderRadius: "8px",
+                border: "1px solid var(--color-border, #e2e8f0)",
+              }}
+            >
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage <= 1 || loading}
+                onClick={() => loadNotifications(true, currentPage - 1)}
+                style={{ padding: "0.4rem 0.8rem", cursor: currentPage > 1 ? "pointer" : "not-allowed" }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: "0.9rem", color: "var(--color-text-muted, #64748b)" }}>
+                Page <strong>{currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.total} total)
+              </span>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={currentPage >= pagination.totalPages || loading}
+                onClick={() => loadNotifications(true, currentPage + 1)}
+                style={{ padding: "0.4rem 0.8rem", cursor: currentPage < pagination.totalPages ? "pointer" : "not-allowed" }}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

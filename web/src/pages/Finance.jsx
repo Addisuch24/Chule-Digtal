@@ -36,6 +36,9 @@ function Finance() {
   const [editingMovement, setEditingMovement] = useState(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState(null);
   const [openMenuMovementId, setOpenMenuMovementId] = useState(null);
+  const [openMenuCustomerKey, setOpenMenuCustomerKey] = useState(null);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [settlingCustomer, setSettlingCustomer] = useState(null);
   const [selectedMovementIds, setSelectedMovementIds] = useState([]);
   const [autosaveStatus, setAutosaveStatus] = useState("");
   const [busyMovementId, setBusyMovementId] = useState(null);
@@ -76,16 +79,18 @@ function Finance() {
   }, [loadMovements, loadCustomers]);
 
   useEffect(() => {
-    if (openMenuMovementId === null) return undefined;
+    if (openMenuMovementId === null && openMenuCustomerKey === null) return undefined;
 
     function handleMenuDismiss(event) {
       if (event.type === "keydown" && event.key === "Escape") {
         setOpenMenuMovementId(null);
+        setOpenMenuCustomerKey(null);
       } else if (
         event.type === "pointerdown" &&
         !movementList.current?.contains(event.target)
       ) {
         setOpenMenuMovementId(null);
+        setOpenMenuCustomerKey(null);
       }
     }
 
@@ -96,7 +101,7 @@ function Finance() {
       document.removeEventListener("keydown", handleMenuDismiss);
       document.removeEventListener("pointerdown", handleMenuDismiss);
     };
-  }, [openMenuMovementId]);
+  }, [openMenuMovementId, openMenuCustomerKey]);
 
   const saveMovementEdit = useCallback(
     (movement) => {
@@ -360,6 +365,128 @@ function Finance() {
     }
   }
 
+  function getCustomerStatus(group) {
+    const balance = Number(group.balance || 0);
+    if (balance < 0) {
+      return {
+        statusKey: "DEBT",
+        amharic: "ተበድሩዋል",
+        english: "Tebedruwal",
+        badgeClass: "customer-status-badge badge-debt",
+      };
+    }
+    if (balance > 0) {
+      return {
+        statusKey: "CREDIT",
+        amharic: "ቀር ሂሳብ",
+        english: "Ker Hisab",
+        badgeClass: "customer-status-badge badge-credit",
+      };
+    }
+    // Settled / Zero balance: inspect non-rejected transaction history
+    const nonRejected = (group.movements || [])
+      .filter((m) => (m.verification_status || m.verificationStatus) !== "REJECTED")
+      .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0));
+
+    const lastMovement = nonRejected[0];
+    if (lastMovement) {
+      const type = (lastMovement.movement_type || lastMovement.movementType || "").toUpperCase();
+      if (type === "CREDIT") {
+        return {
+          statusKey: "PAID",
+          amharic: "ከፍለዋል",
+          english: "Kefluwal",
+          badgeClass: "customer-status-badge badge-settled-default",
+        };
+      } else if (type === "DEBIT") {
+        return {
+          statusKey: "RECEIVED",
+          amharic: "ተቀብለዋል",
+          english: "Tekebluwal",
+          badgeClass: "customer-status-badge badge-settled-default",
+        };
+      }
+    }
+
+    return {
+      statusKey: "SETTLED",
+      amharic: "ተስተካክሏል",
+      english: "Settled",
+      badgeClass: "customer-status-badge badge-settled-default",
+    };
+  }
+
+  async function handleSaveCustomerEdit(event) {
+    event.preventDefault();
+    if (!editingCustomer || !editingCustomer.id) return;
+    const trimmedName = (editingCustomer.full_name || "").trim();
+    if (!trimmedName) {
+      setError("Customer name cannot be empty.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
+      await api.patch(`/customers/${editingCustomer.id}`, {
+        full_name: trimmedName,
+        phone: (editingCustomer.phone || "").trim() || null,
+      });
+      setMessage(`Customer "${trimmedName}" updated successfully.`);
+      setEditingCustomer(null);
+      await Promise.all([loadMovements(), loadCustomers()]);
+    } catch (requestError) {
+      console.error("Update customer error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to update customer."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleConfirmSettleCustomer(event) {
+    event.preventDefault();
+    if (!settlingCustomer || !settlingCustomer.id) return;
+
+    const absAmount = Math.abs(Number(settlingCustomer.balance || 0));
+    if (absAmount <= 0) {
+      setSettlingCustomer(null);
+      return;
+    }
+
+    const movementType = settlingCustomer.balance < 0 ? "CREDIT" : "DEBIT";
+    const defaultDesc =
+      settlingCustomer.balance < 0
+        ? "የዕዳ ክፍያ (ከፍለዋል - Settled)"
+        : "የቀሪ ብር ክፍያ (ተቀብለዋል - Settled)";
+
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
+      await api.post("/financial-movements", {
+        customerId: Number(settlingCustomer.id),
+        amount: absAmount,
+        movementType,
+        description: defaultDesc,
+      });
+      setMessage(
+        `Successfully settled balance for ${settlingCustomer.name}. Marked as ${movementType === "CREDIT" ? "ከፍለዋል (Kefluwal)" : "ተቀብለዋል (Tekebluwal)"}.`
+      );
+      setSettlingCustomer(null);
+      await Promise.all([loadMovements(), loadCustomers()]);
+    } catch (requestError) {
+      console.error("Settle customer balance error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to settle customer balance."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleToggleSelectMovement(id, event) {
     event.stopPropagation();
     setSelectedMovementIds((prev) =>
@@ -517,7 +644,7 @@ function Finance() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Financial Overview"
-        title="Finance"
+        title="Customer Balance"
         description="Track income, expenses and keep your customer balances healthy."
         action={<span className="count-label">{movements.length} movements</span>}
         theme="finance"
@@ -698,14 +825,14 @@ function Finance() {
             {[
               {
                 key: "negative",
-                label: "Customers with Debt",
+                label: "Customers with Debt — Tebedruwal (ተበድሩዋል)",
                 sign: "−",
                 groups: customersOwed,
                 balanceClass: "balance-negative",
               },
               {
                 key: "positive",
-                label: "Customers in Credit",
+                label: "Customers in Credit — Ker Hisab (ቀር ሂሳብ)",
                 sign: "+",
                 groups: customersInCredit,
                 balanceClass: "balance-positive",
@@ -714,7 +841,7 @@ function Finance() {
                 ? [
                     {
                       key: "settled",
-                      label: "Settled Accounts",
+                      label: "Settled Accounts (የተስተካከሉ ሂሳቦች)",
                       sign: "✓",
                       groups: customersSettled,
                       balanceClass: "balance-settled",
@@ -736,54 +863,126 @@ function Finance() {
                   <div className="finance-customer-list">
                     {column.groups.map((group) => (
                       <section className="finance-customer-group" key={group.id}>
-                        <header className="finance-customer-heading">
-                          <div>
-                            <button
-                              className="finance-customer-name"
-                              type="button"
-                              aria-expanded={expandedCustomerId === group.id}
-                              aria-controls={`finance-customer-${group.id}-notes`}
-                              onClick={() =>
-                                setExpandedCustomerId(
-                                  expandedCustomerId === group.id ? null : group.id
-                                )
-                              }
-                            >
-                              {group.name}
-                            </button>
+                        <header
+                          className={`finance-customer-heading ${
+                            group.balance > 0
+                              ? "balance-card-positive"
+                              : group.balance < 0
+                              ? "balance-card-negative"
+                              : "balance-card-zero"
+                          }`}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                              <button
+                                className="finance-customer-name"
+                                type="button"
+                                aria-expanded={expandedCustomerId === group.id}
+                                aria-controls={`finance-customer-${group.id}-notes`}
+                                onClick={() =>
+                                  setExpandedCustomerId(
+                                    expandedCustomerId === group.id ? null : group.id
+                                  )
+                                }
+                              >
+                                {group.name}
+                              </button>
+                              {(() => {
+                                const status = getCustomerStatus(group);
+                                return (
+                                  <span
+                                    className={status.badgeClass}
+                                    title={`Status: ${status.english}`}
+                                  >
+                                    {status.amharic}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                             {group.phone && <small>{group.phone}</small>}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                             <strong
-                              className={`finance-customer-balance ${column.balanceClass}`}
+                              className={`finance-customer-balance ${
+                                group.balance > 0
+                                  ? "balance-positive"
+                                  : group.balance < 0
+                                  ? "balance-negative"
+                                  : "balance-settled"
+                              }`}
                             >
-                              {group.balance > 0 ? "+" : "−"}
+                              {group.balance > 0 ? "+" : group.balance < 0 ? "−" : ""}
                               {formatAmount(Math.abs(group.balance))}
                             </strong>
-                            <button
-                              type="button"
-                              className="icon-button"
-                              title={`Delete ${group.name} and all associated ledger records`}
-                              aria-label={`Delete ${group.name}`}
-                              style={{
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                color: "#ef4444",
-                                padding: "4px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                opacity: 0.75,
-                              }}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleDeleteCustomer(group);
-                              }}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
-                              </svg>
-                            </button>
+                            {/* Rightmost Action Button with Dropdown Menu */}
+                            <div className="order-note-menu" style={{ position: "relative" }}>
+                              <button
+                                className="order-menu-trigger"
+                                type="button"
+                                aria-label={`Actions for ${group.name}`}
+                                aria-haspopup="menu"
+                                aria-expanded={openMenuCustomerKey === group.name}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuCustomerKey(
+                                    openMenuCustomerKey === group.name ? null : group.name
+                                  );
+                                }}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                  <circle cx="12" cy="5" r="2.2" />
+                                  <circle cx="12" cy="12" r="2.2" />
+                                  <circle cx="12" cy="19" r="2.2" />
+                                </svg>
+                              </button>
+                              {openMenuCustomerKey === group.name && (
+                                <div className="order-menu" role="menu">
+                                  {group.balance !== 0 && (
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuCustomerKey(null);
+                                        setSettlingCustomer(group);
+                                      }}
+                                    >
+                                      {group.balance < 0
+                                        ? "Settle Debt (ክፍያ መዝግብ)"
+                                        : "Settle Credit (ቀሪ አስረክብ)"}
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuCustomerKey(null);
+                                      setEditingCustomer({
+                                        id: group.id,
+                                        full_name: group.name,
+                                        phone: group.phone || "",
+                                      });
+                                    }}
+                                  >
+                                    Edit Customer
+                                  </button>
+                                  <button
+                                    className="order-menu-delete"
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenMenuCustomerKey(null);
+                                      handleDeleteCustomer(group);
+                                    }}
+                                    disabled={submitting}
+                                  >
+                                    Delete Customer
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </header>
                         {expandedCustomerId === group.id && (
@@ -908,7 +1107,11 @@ function Finance() {
                               )
                             }
                           >
-                            &hellip;
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                              <circle cx="12" cy="5" r="2.2" />
+                              <circle cx="12" cy="12" r="2.2" />
+                              <circle cx="12" cy="19" r="2.2" />
+                            </svg>
                           </button>
                           {openMenuMovementId === movement.id && (
                             <div className="order-menu" role="menu">
@@ -949,6 +1152,145 @@ function Finance() {
           </div>
         )}
       </section>
+      {editingCustomer && (
+        <div className="modal-backdrop" onClick={() => setEditingCustomer(null)}>
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-customer-modal-title"
+          >
+            <div className="modal-header">
+              <h3 id="edit-customer-modal-title">Edit Customer</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setEditingCustomer(null)}
+                aria-label="Close dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleSaveCustomerEdit} className="form-stack">
+              <label>
+                Customer Name
+                <input
+                  type="text"
+                  value={editingCustomer.full_name}
+                  onChange={(e) =>
+                    setEditingCustomer({
+                      ...editingCustomer,
+                      full_name: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Phone Number <span className="muted">(optional)</span>
+                <input
+                  type="tel"
+                  value={editingCustomer.phone}
+                  onChange={(e) =>
+                    setEditingCustomer({
+                      ...editingCustomer,
+                      phone: e.target.value,
+                    })
+                  }
+                  placeholder="09..."
+                />
+              </label>
+              <div className="action-row" style={{ marginTop: "1rem" }}>
+                <button type="submit" disabled={submitting}>
+                  {submitting ? "Saving..." : "Save changes"}
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setEditingCustomer(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {settlingCustomer && (
+        <div className="modal-backdrop" onClick={() => setSettlingCustomer(null)}>
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settle-customer-modal-title"
+          >
+            <div className="modal-header">
+              <h3 id="settle-customer-modal-title">
+                {settlingCustomer.balance < 0
+                  ? "Settle Debt (ክፍያ መዝግብ)"
+                  : "Settle Credit (ቀሪ አስረክብ)"}
+              </h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setSettlingCustomer(null)}
+                aria-label="Close dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleConfirmSettleCustomer} className="form-stack">
+              <p style={{ margin: 0, fontSize: "0.95rem", color: "var(--ink-soft)" }}>
+                {settlingCustomer.balance < 0
+                  ? `Record a payment of ${formatAmount(Math.abs(settlingCustomer.balance))} for ${settlingCustomer.name} to settle their debt? Their status will update to "ከፍለዋል (Kefluwal)".`
+                  : `Record a payout/clearance of ${formatAmount(Math.abs(settlingCustomer.balance))} for ${settlingCustomer.name} to clear their credit balance? Their status will update to "ተቀብለዋል (Tekebluwal)".`}
+              </p>
+              <div
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  background:
+                    settlingCustomer.balance < 0
+                      ? "rgba(239, 68, 68, 0.08)"
+                      : "rgba(16, 185, 129, 0.08)",
+                  fontWeight: 600,
+                  fontSize: "1.05rem",
+                  textAlign: "center",
+                }}
+              >
+                Settlement Amount: {formatAmount(Math.abs(settlingCustomer.balance))}
+              </div>
+              <div className="action-row" style={{ marginTop: "1rem" }}>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    backgroundColor:
+                      settlingCustomer.balance < 0 ? "#10b981" : "#17324D",
+                    color: "#fff",
+                  }}
+                >
+                  {submitting
+                    ? "Recording..."
+                    : settlingCustomer.balance < 0
+                    ? "Confirm Payment (ከፍለዋል)"
+                    : "Confirm Clearance (ተቀብለዋል)"}
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setSettlingCustomer(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

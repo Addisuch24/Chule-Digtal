@@ -196,4 +196,99 @@ class FinanceViewModelGroupingTest {
         val stateAfterUpdate = viewModel.uiState.value as FinanceUiState.Success
         assertEquals("Debtors list must STILL contain only 1 customer after edit", 1, stateAfterUpdate.customersWhoOwe.size)
     }
+
+    @Test
+    fun testCustomerBalanceStatus_debtToKefluwalWorkflow() = runTest {
+        // Customer with debt
+        customerRepo.customers.add(
+            Customer(id = "1", name = "Abebe", phone = "0911000000", createdBy = "Admin", createdDate = "2026-10-22", updatedDate = "2026-10-22")
+        )
+        // Debt: 1000 ETB
+        financialRepo.movements.add(
+            FinancialMovement("1", "1", "Abebe", MovementType.DEBIT, 1000.0, "2026-10-20", "Initial Loan", "Admin", VerificationStatus.VERIFIED)
+        )
+
+        val viewModel = FinanceViewModel(financialRepo, customerRepo)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        var state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals(1, state.customersWhoOwe.size)
+        var abe = state.customersWhoOwe.first()
+        assertEquals(-1000.0, abe.balance, 0.001)
+        assertEquals(com.chuledigita.mobile.ui.screens.BalanceStatusType.TEBEDRUWAL, abe.status.type)
+        assertEquals("ተበድሩዋል", abe.status.amharicLabel)
+
+        // Partial payment (400 ETB) -> remaining debt is 600 ETB, status MUST remain Tebedruwal
+        viewModel.recordEntry("Abebe", "0911000000", 400.0, "Partial payment")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals(1, state.customersWhoOwe.size)
+        abe = state.customersWhoOwe.first()
+        assertEquals(-600.0, abe.balance, 0.001)
+        assertEquals("Partial payment must retain Tebedruwal status", com.chuledigita.mobile.ui.screens.BalanceStatusType.TEBEDRUWAL, abe.status.type)
+
+        // Fully settle debt (600 ETB)
+        viewModel.settleCustomer("1", 600.0, isDebt = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals("Debtors list should now be empty", 0, state.customersWhoOwe.size)
+        assertEquals("Settled list must contain Abebe", 1, state.customersSettled.size)
+        val settledAbe = state.customersSettled.first()
+        assertEquals(0.0, settledAbe.balance, 0.001)
+        assertEquals("Settling debt must change status to Kefluwal", com.chuledigita.mobile.ui.screens.BalanceStatusType.KEFLUWAL, settledAbe.status.type)
+        assertEquals("ከፍለዋል", settledAbe.status.amharicLabel)
+    }
+
+    @Test
+    fun testCustomerBalanceStatus_creditToTekebluwalWorkflow() = runTest {
+        // Customer with credit (business owes customer)
+        customerRepo.customers.add(
+            Customer(id = "2", name = "Chaltu", phone = "0922000000", createdBy = "Admin", createdDate = "2026-10-22", updatedDate = "2026-10-22")
+        )
+        // Credit: 800 ETB
+        financialRepo.movements.add(
+            FinancialMovement("2", "2", "Chaltu", MovementType.CREDIT, 800.0, "2026-10-20", "Customer Deposit", "Admin", VerificationStatus.VERIFIED)
+        )
+
+        val viewModel = FinanceViewModel(financialRepo, customerRepo)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        var state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals(1, state.customersWithCredit.size)
+        var chaltu = state.customersWithCredit.first()
+        assertEquals(800.0, chaltu.balance, 0.001)
+        assertEquals(com.chuledigita.mobile.ui.screens.BalanceStatusType.KER_HISAB, chaltu.status.type)
+        assertEquals("ቀር ሂሳብ", chaltu.status.amharicLabel)
+
+        // Partial receipt/payout (300 ETB) -> remaining credit is 500 ETB, status MUST remain Ker Hisab
+        viewModel.recordEntry("Chaltu", "0922000000", -300.0, "Partial payout")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals(1, state.customersWithCredit.size)
+        chaltu = state.customersWithCredit.first()
+        assertEquals(500.0, chaltu.balance, 0.001)
+        assertEquals("Partial payout must retain Ker Hisab status", com.chuledigita.mobile.ui.screens.BalanceStatusType.KER_HISAB, chaltu.status.type)
+
+        // Fully settle credit (500 ETB)
+        viewModel.settleCustomer("2", 500.0, isDebt = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        state = viewModel.uiState.value as FinanceUiState.Success
+        assertEquals("Creditors list should now be empty", 0, state.customersWithCredit.size)
+        assertEquals("Settled list must contain Chaltu", 1, state.customersSettled.size)
+        val settledChaltu = state.customersSettled.first()
+        assertEquals(0.0, settledChaltu.balance, 0.001)
+        assertEquals("Settling credit must change status to Tekebluwal", com.chuledigita.mobile.ui.screens.BalanceStatusType.TEKEBLUWAL, settledChaltu.status.type)
+        assertEquals("ተቀብለዋል", settledChaltu.status.amharicLabel)
+    }
+
+    @Test
+    fun testCustomerBalanceStatus_zeroBalanceWithoutMovements_isSettled() = runTest {
+        val status = com.chuledigita.mobile.ui.screens.CustomerBalance.computeStatus(0.0, emptyList())
+        assertEquals(com.chuledigita.mobile.ui.screens.BalanceStatusType.SETTLED, status.type)
+        assertEquals("ተስተካክሏል", status.amharicLabel)
+    }
 }

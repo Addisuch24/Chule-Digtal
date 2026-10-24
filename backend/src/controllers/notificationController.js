@@ -1,4 +1,5 @@
 const notificationModel = require("../models/notificationModel");
+const socketService = require("../services/socketService");
 
 async function createNotification(req, res) {
   try {
@@ -111,17 +112,25 @@ async function getNotificationsByRecipient(req, res) {
     }
 
     const unreadOnly = req.query.unread === "true" || req.query.unread === "1";
-    const limit = req.query.limit ? Number(req.query.limit) : 100;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = req.query.limit ? Math.max(1, Math.min(Number(req.query.limit), 200)) : 50;
 
-    const notifications =
+    const result =
       await notificationModel.getNotificationsByRecipient(
         Number(recipientId),
-        { unreadOnly, limit }
+        { unreadOnly, page, limit }
       );
 
     return res.status(200).json({
       success: true,
-      data: notifications,
+      data: result.rows,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+        hasMore: result.page < result.totalPages,
+      },
     });
   } catch (error) {
     console.error(
@@ -185,7 +194,7 @@ async function markNotificationAsRead(req, res) {
       });
     }
 
-    if (existingNotification.recipient_id !== req.user.id) {
+    if (Number(existingNotification.recipient_id) !== Number(req.user.id)) {
       return res.status(403).json({
         success: false,
         message: "You are not allowed to modify this notification",
@@ -254,7 +263,7 @@ async function getUnreadNotificationCount(req, res) {
 async function deleteNotification(req, res) {
   try {
     const { notificationId } = req.params;
-    const recipientId = req.user?.id;
+    const recipientId = Number(req.user?.id);
 
     if (!notificationId || isNaN(notificationId)) {
       return res.status(400).json({
@@ -274,7 +283,7 @@ async function deleteNotification(req, res) {
       });
     }
 
-    if (existingNotification.recipient_id !== recipientId) {
+    if (Number(existingNotification.recipient_id) !== recipientId) {
       return res.status(403).json({
         success: false,
         message: "You are not allowed to delete this notification",
@@ -293,9 +302,18 @@ async function deleteNotification(req, res) {
       });
     }
 
+    // Emit real-time synchronization event to all connected devices for this user
+    socketService.emitToUser(recipientId, "notification:deleted", {
+      notificationId: Number(notificationId),
+      recipientId,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Notification deleted successfully",
+      data: {
+        deletedId: Number(notificationId),
+      },
     });
   } catch (error) {
     console.error("Delete notification error:", error);
@@ -308,17 +326,17 @@ async function deleteNotification(req, res) {
 
 async function deleteNotifications(req, res) {
   try {
-    const { notificationIds } = req.body;
-    const recipientId = req.user?.id;
+    const rawIds = req.body.notificationIds || req.body.ids;
+    const recipientId = Number(req.user?.id);
 
-    if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
       return res.status(400).json({
         success: false,
         message: "notificationIds must be a non-empty array",
       });
     }
 
-    const validIds = notificationIds
+    const validIds = rawIds
       .map((id) => Number(id))
       .filter((id) => Number.isInteger(id) && id > 0);
 
@@ -334,6 +352,20 @@ async function deleteNotifications(req, res) {
       recipientId
     );
 
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No matching notifications found for deletion",
+        data: result,
+      });
+    }
+
+    // Emit real-time synchronization event to all connected devices for this user
+    socketService.emitToUser(recipientId, "notification:bulk_deleted", {
+      notificationIds: result.deletedIds,
+      recipientId,
+    });
+
     return res.status(200).json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} notification(s)`,
@@ -348,6 +380,37 @@ async function deleteNotifications(req, res) {
   }
 }
 
+async function deleteAllNotifications(req, res) {
+  try {
+    const recipientId = Number(req.user?.id);
+    if (!recipientId || isNaN(recipientId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid recipientId is required",
+      });
+    }
+
+    const deletedCount = await notificationModel.deleteAllNotifications(recipientId);
+
+    // Emit real-time synchronization event to all connected devices for this user
+    socketService.emitToUser(recipientId, "notification:all_deleted", {
+      recipientId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted all ${deletedCount} notification(s)`,
+      data: { deletedCount },
+    });
+  } catch (error) {
+    console.error("Delete all notifications error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete all notifications",
+    });
+  }
+}
+
 module.exports = {
   createNotification,
   getNotificationById,
@@ -357,4 +420,5 @@ module.exports = {
   getUnreadNotificationCount,
   deleteNotification,
   deleteNotifications,
+  deleteAllNotifications,
 };

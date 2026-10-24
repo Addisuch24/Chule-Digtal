@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import api from "../services/api";
 import { connectSocket } from "../services/socket";
 import "../layouts/MainLayout.css";
 
 function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState("login"); // 'login' | 'register'
 
   // Registration 5-field state
@@ -50,7 +51,10 @@ function Login() {
           localStorage.setItem("user", JSON.stringify(loginData.user));
         }
         connectSocket();
-        navigate("/dashboard", { replace: true });
+        const destination = location.state?.from?.pathname
+          ? `${location.state.from.pathname}${location.state.from.search || ""}`
+          : "/dashboard";
+        navigate(destination, { replace: true });
       } catch (requestError) {
         console.error("Login error:", requestError);
         setError(

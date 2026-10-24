@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,84 +25,112 @@ import com.chuledigita.mobile.ui.components.InAppNotificationBanner
 import com.chuledigita.mobile.ui.screens.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
 fun AppNavigation(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    activityIntentFlow: kotlinx.coroutines.flow.SharedFlow<android.content.Intent>? = null
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as ChuleApplication
     val notificationRepo = application.container.notificationRepository
+    val notifNavManager = application.container.notificationNavigationManager
+    val deviceTokenManager = application.container.deviceTokenManager
+    val sessionRepo = application.container.sessionRepository
     val inAppManager = notificationRepo.inAppNotificationManager
     val popUpState by inAppManager.currentPopUp.collectAsStateWithLifecycle()
 
     val logoutAction: () -> Unit = {
         SessionPreferences.setLoggedIn(context, false)
         inAppManager.clearSession()
+        deviceTokenManager.logoutDevice()
         CoroutineScope(Dispatchers.IO).launch {
-            application.container.sessionRepository.clearSession()
+            sessionRepo.clearSession()
         }
         navController.navigate(Screen.Login.route) {
             popUpTo(0) { inclusive = true }
         }
     }
 
+    val processIntent: (android.content.Intent) -> Unit = { intent ->
+        val notifId = intent.getStringExtra("NOTIFICATION_ID")
+        val notifType = intent.getStringExtra("NOTIFICATION_TYPE")
+        val entityType = intent.getStringExtra("ENTITY_TYPE")
+        val entityId = intent.getStringExtra("ENTITY_ID")
+
+        if (!notifId.isNullOrBlank() || !notifType.isNullOrBlank() || !entityId.isNullOrBlank()) {
+            val intentKey = "${notifId ?: "none"}_${notifType}_${entityId}"
+            if (!notifNavManager.isIntentAlreadyHandled(intentKey)) {
+                notifNavManager.markIntentHandled(intentKey)
+
+                // Clean extras from intent to prevent accidental duplicate reads
+                intent.removeExtra("NOTIFICATION_TYPE")
+                intent.removeExtra("ENTITY_ID")
+                intent.removeExtra("NOTIFICATION_ID")
+                intent.removeExtra("ENTITY_TYPE")
+
+                val targetRoute = notifNavManager.resolveRoute(notifType, entityType, entityId)
+                val isCurrentlyOnLoginScreen = navController.currentDestination?.route == Screen.Login.route
+                val isLoggedIn = SessionPreferences.isLoggedIn(context) && !sessionRepo.getCachedToken().isNullOrBlank()
+
+                if (isLoggedIn && !isCurrentlyOnLoginScreen) {
+                    // Valid active session: navigate directly to target without displaying login
+                    navController.navigate(targetRoute)
+                } else {
+                    // Logged out or expired session: securely preserve target destination
+                    notifNavManager.setPendingDestination(targetRoute, notifId)
+                    if (!isCurrentlyOnLoginScreen) {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Handle intent emissions via activityIntentFlow
+    if (activityIntentFlow != null) {
+        androidx.compose.runtime.LaunchedEffect(activityIntentFlow) {
+            activityIntentFlow.collect { intent ->
+                processIntent(intent)
+            }
+        }
+    } else {
+        // Fallback for previews or standalone Compose tests
+        val activity = context as? androidx.activity.ComponentActivity
+        androidx.compose.runtime.LaunchedEffect(activity?.intent) {
+            activity?.intent?.let { processIntent(it) }
+        }
+    }
+
     val handlePopUpClick: (InAppPopUpState) -> Unit = { state ->
         inAppManager.dismiss()
-        when (state) {
+        val targetRoute: String? = when (state) {
             is InAppPopUpState.Single -> {
                 val item = state.item
                 CoroutineScope(Dispatchers.IO).launch {
                     notificationRepo.markAsRead(item.id)
                 }
-                when (item.type) {
-                    NotificationType.ORDER_CREATED,
-                    NotificationType.ORDER_VERIFIED,
-                    NotificationType.ORDER_REJECTED,
-                    NotificationType.ORDER_STATUS_UPDATED -> {
-                        val entityId = item.entityId
-                        if (!entityId.isNullOrBlank()) {
-                            navController.navigate(Screen.OrderDetails.createRoute(entityId))
-                        } else {
-                            navController.navigate(Screen.Orders.route)
-                        }
-                    }
-                    NotificationType.BUSINESS_NOTE_CREATED -> {
-                        val entityId = item.entityId
-                        if (!entityId.isNullOrBlank()) {
-                            navController.navigate(Screen.NoteDetails.createRoute(entityId))
-                        } else {
-                            navController.navigate(Screen.Notes.route)
-                        }
-                    }
-                    NotificationType.CUSTOMER_NOTE_CREATED,
-                    NotificationType.CUSTOMER_CREATED,
-                    NotificationType.CUSTOMER_UPDATED,
-                    NotificationType.CUSTOMER_DELETED,
-                    NotificationType.CUSTOMER_BULK_DELETED -> {
-                        val entityId = item.entityId
-                        if (!entityId.isNullOrBlank() && item.type != NotificationType.CUSTOMER_DELETED && item.type != NotificationType.CUSTOMER_BULK_DELETED) {
-                            navController.navigate(Screen.CustomerDetails.createRoute(entityId))
-                        } else {
-                            navController.navigate(Screen.Customers.route)
-                        }
-                    }
-                    NotificationType.FINANCIAL_MOVEMENT_CREATED,
-                    NotificationType.FINANCIAL_MOVEMENT_VERIFIED,
-                    NotificationType.FINANCIAL_MOVEMENT_REJECTED,
-                    NotificationType.FINANCIAL_MOVEMENT_DELETED,
-                    NotificationType.FINANCIAL_MOVEMENT_BULK_DELETED,
-                    NotificationType.PAYMENT_RECORDED -> {
-                        navController.navigate(Screen.Finance.route)
-                    }
-                    NotificationType.SYSTEM -> {
-                        navController.navigate(Screen.Notifications.route)
-                    }
-                }
+                notifNavManager.resolveRoute(item.type.name, item.entityType, item.entityId)
             }
             is InAppPopUpState.Summary -> {
-                navController.navigate(Screen.Notifications.route)
+                Screen.Notifications.route
+            }
+        }
+
+        if (targetRoute != null) {
+            val isCurrentlyOnLoginScreen = navController.currentDestination?.route == Screen.Login.route
+            val isLoggedIn = SessionPreferences.isLoggedIn(context) && !sessionRepo.getCachedToken().isNullOrBlank()
+            if (isLoggedIn && !isCurrentlyOnLoginScreen) {
+                navController.navigate(targetRoute)
+            } else {
+                notifNavManager.setPendingDestination(targetRoute)
+                if (!isCurrentlyOnLoginScreen) {
+                    navController.navigate(Screen.Login.route)
+                }
             }
         }
     }
@@ -113,7 +144,14 @@ fun AppNavigation(
             LoginScreen(
                 onLoginSuccess = {
                     SessionPreferences.setLoggedIn(context, true)
-                    navController.navigate(Screen.Dashboard.route) {
+                    // Associate user session with device push token
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val session = sessionRepo.userSessionFlow.first()
+                        session?.let { deviceTokenManager.registerDevice(it.id) }
+                    }
+                    val target = notifNavManager.consumePendingDestination()
+                    val destination = target ?: Screen.Dashboard.route
+                    navController.navigate(destination) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },

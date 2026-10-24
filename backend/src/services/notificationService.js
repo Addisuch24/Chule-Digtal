@@ -1,5 +1,7 @@
 const notificationModel = require("../models/notificationModel");
+const deviceRegistrationModel = require("../models/deviceRegistrationModel");
 const socketService = require("./socketService");
+const pushService = require("./pushService");
 const pool = require("../config/db");
 
 async function sendNotification({
@@ -42,11 +44,23 @@ async function sendNotification({
     created_at: nowIso,
   };
 
+  // 1. Emit real-time Socket.IO event
   socketService.emitToUser(
     recipientId,
     "notification:new",
     payload
   );
+
+  // 2. Dispatch push notification to registered devices (online/offline background delivery)
+  try {
+    const devices = await deviceRegistrationModel.getDevicesForUser(recipientId);
+    const tokens = devices.map((d) => d.device_token);
+    if (tokens.length > 0) {
+      await pushService.sendPushNotification(tokens, payload);
+    }
+  } catch (err) {
+    console.warn("[NOTIFICATION SERVICE] Error dispatching push to user devices:", err.message);
+  }
 
   return notification;
 }
@@ -113,6 +127,31 @@ async function sendNotificationToMembers({
 
     socketService.emitToUser(id, "notification:new", payload);
   });
+
+  // Dispatch push notifications to all member devices
+  try {
+    for (let i = 0; i < recipientIds.length; i++) {
+      const id = recipientIds[i];
+      const notificationId = firstInsertId > 0 ? (firstInsertId + i) : null;
+      const devices = await deviceRegistrationModel.getDevicesForUser(id);
+      const tokens = devices.map((d) => d.device_token);
+      if (tokens.length > 0) {
+        await pushService.sendPushNotification(tokens, {
+          id: notificationId,
+          recipientId: Number(id),
+          activityId: activityId ? Number(activityId) : null,
+          entityType: entityType || null,
+          entityId: entityId != null ? String(entityId) : null,
+          notificationType,
+          title: String(title || "Business Update"),
+          message: String(message || ""),
+          createdAt: nowIso,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[NOTIFICATION SERVICE] Error dispatching push to members:", err.message);
+  }
 
   return [];
 }

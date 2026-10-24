@@ -26,8 +26,10 @@ object ApiConfig {
     fun init(context: android.content.Context) {
         val prefs = context.getSharedPreferences("chule_network_prefs", android.content.Context.MODE_PRIVATE)
         val saved = prefs.getString("custom_base_url", null)
-        if (!saved.isNullOrBlank()) {
+        if (!saved.isNullOrBlank() && !saved.contains("10.232.84.204") && !saved.contains("192.168.188.3")) {
             BASE_URL = saved
+        } else {
+            BASE_URL = LAN_BASE_URL
         }
     }
 

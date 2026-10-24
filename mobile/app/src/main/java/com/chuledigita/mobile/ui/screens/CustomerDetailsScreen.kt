@@ -80,14 +80,22 @@ fun CustomerDetailsScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { viewModel.loadCustomerDetails() },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("እንደገና ሞክር (Retry)")
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(
+                                onClick = { navController.navigate(Screen.Customers.route) },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("ወደ ደንበኞች ተመለስ")
+                            }
+                            Button(
+                                onClick = { viewModel.loadCustomerDetails() },
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("እንደገና ሞክር (Retry)")
+                            }
                         }
                     }
                 }

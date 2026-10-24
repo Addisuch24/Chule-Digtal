@@ -133,8 +133,9 @@ class NotificationsViewModel(
             result.onSuccess { data ->
                 val count = data.deletedCount ?: data.deletedIds?.size ?: selected.size
                 val msg = "$count ማሳወቂያዎች በተሳካ ሁኔታ ተሰርዘዋል።"
+                val actuallyDeleted = (data.deletedIds?.map { it.toString() } ?: selected).toSet()
                 _extraState.value = _extraState.value.copy(
-                    selectedNotificationIds = emptySet(),
+                    selectedNotificationIds = _extraState.value.selectedNotificationIds - actuallyDeleted,
                     isDeletingBatch = false,
                     actionMessage = msg
                 )
@@ -146,6 +147,50 @@ class NotificationsViewModel(
                     actionError = errText
                 )
                 onComplete?.invoke(0, errText)
+            }
+        }
+    }
+
+    fun deleteNotification(notificationId: String) {
+        scope.launch {
+            val result = notificationRepository.deleteNotification(notificationId)
+            result.onSuccess {
+                _extraState.value = _extraState.value.copy(
+                    selectedNotificationIds = _extraState.value.selectedNotificationIds - notificationId,
+                    actionMessage = "ማሳወቂያው ተሰርዟል (Notification deleted)",
+                    actionError = null
+                )
+            }.onFailure { err ->
+                _extraState.value = _extraState.value.copy(
+                    actionError = err.message ?: "Failed to delete notification",
+                    actionMessage = null
+                )
+            }
+        }
+    }
+
+    fun deleteAllNotifications(onComplete: ((Boolean) -> Unit)? = null) {
+        _extraState.value = _extraState.value.copy(
+            isDeletingBatch = true,
+            actionMessage = null,
+            actionError = null
+        )
+
+        scope.launch {
+            val result = notificationRepository.deleteAllNotifications()
+            result.onSuccess {
+                _extraState.value = _extraState.value.copy(
+                    selectedNotificationIds = emptySet(),
+                    isDeletingBatch = false,
+                    actionMessage = "ሁሉም ማሳወቂያዎች ተሰርዘዋል (All notifications cleared)"
+                )
+                onComplete?.invoke(true)
+            }.onFailure { err ->
+                _extraState.value = _extraState.value.copy(
+                    isDeletingBatch = false,
+                    actionError = err.message ?: "Failed to delete all notifications"
+                )
+                onComplete?.invoke(false)
             }
         }
     }

@@ -64,8 +64,29 @@ async function getNotificationById(notificationId) {
 }
 
 async function getNotificationsByRecipient(recipientId, options = {}) {
-  const { unreadOnly = false, limit = 100 } = options;
-  let query = `
+  const { unreadOnly = false, page = 1, limit = 50 } = options;
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.max(1, Math.min(Number(limit) || 50, 200));
+  const offset = (pageNum - 1) * limitNum;
+
+  let baseWhere = "WHERE n.recipient_id = ?";
+  const whereParams = [recipientId];
+
+  if (unreadOnly) {
+    baseWhere += " AND n.is_read = FALSE";
+  }
+
+  // Count total notifications matching criteria
+  const countQuery = `
+    SELECT COUNT(*) AS total
+    FROM notifications n
+    ${baseWhere}
+  `;
+  const [[countResult]] = await pool.query(countQuery, whereParams);
+  const total = Number(countResult?.total || 0);
+
+  // Fetch paginated rows
+  const query = `
     SELECT
       n.id,
       n.recipient_id,
@@ -81,19 +102,20 @@ async function getNotificationsByRecipient(recipientId, options = {}) {
     FROM notifications n
     LEFT JOIN activities a
       ON a.id = n.activity_id
-    WHERE n.recipient_id = ?
+    ${baseWhere}
+    ORDER BY n.created_at DESC, n.id DESC
+    LIMIT ? OFFSET ?
   `;
-  const params = [recipientId];
+  const queryParams = [...whereParams, limitNum, offset];
+  const [rows] = await pool.query(query, queryParams);
 
-  if (unreadOnly) {
-    query += " AND n.is_read = FALSE";
-  }
-
-  query += " ORDER BY n.created_at DESC, n.id DESC LIMIT ?";
-  params.push(Math.max(1, Math.min(Number(limit) || 100, 200)));
-
-  const [rows] = await pool.query(query, params);
-  return rows;
+  return {
+    rows,
+    total,
+    page: pageNum,
+    limit: limitNum,
+    totalPages: Math.max(1, Math.ceil(total / limitNum)),
+  };
 }
 
 async function markNotificationAsRead(notificationId) {
@@ -142,6 +164,7 @@ async function getUnreadNotificationCount(recipientId) {
 
   return Number(rows[0].unread_count);
 }
+
 async function deleteNotification(notificationId, recipientId) {
   let query = "DELETE FROM notifications WHERE id = ?";
   const params = [notificationId];
@@ -155,19 +178,49 @@ async function deleteNotification(notificationId, recipientId) {
 
 async function deleteNotifications(notificationIds, recipientId) {
   if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
-    return { deletedCount: 0, deletedIds: [] };
+    return { deletedCount: 0, deletedIds: [], skippedIds: [] };
   }
-  let query = "DELETE FROM notifications WHERE id IN (?)";
-  const params = [notificationIds];
+
+  // Find which of these notifications actually exist and belong to the recipient
+  let selectQuery = "SELECT id FROM notifications WHERE id IN (?)";
+  const selectParams = [notificationIds];
   if (recipientId) {
-    query += " AND recipient_id = ?";
-    params.push(recipientId);
+    selectQuery += " AND recipient_id = ?";
+    selectParams.push(recipientId);
   }
-  const [result] = await pool.query(query, params);
+
+  const [existingRows] = await pool.query(selectQuery, selectParams);
+  const ownedIds = existingRows.map((r) => Number(r.id));
+  const skippedIds = notificationIds
+    .map(Number)
+    .filter((id) => !ownedIds.includes(id));
+
+  if (ownedIds.length === 0) {
+    return {
+      deletedCount: 0,
+      deletedIds: [],
+      skippedIds,
+    };
+  }
+
+  const [result] = await pool.query(
+    "DELETE FROM notifications WHERE id IN (?) AND recipient_id = ?",
+    [ownedIds, recipientId]
+  );
+
   return {
     deletedCount: result.affectedRows,
-    deletedIds: notificationIds,
+    deletedIds: ownedIds,
+    skippedIds,
   };
+}
+
+async function deleteAllNotifications(recipientId) {
+  const [result] = await pool.execute(
+    "DELETE FROM notifications WHERE recipient_id = ?",
+    [recipientId]
+  );
+  return result.affectedRows;
 }
 
 module.exports = {
@@ -179,4 +232,5 @@ module.exports = {
   getUnreadNotificationCount,
   deleteNotification,
   deleteNotifications,
+  deleteAllNotifications,
 };

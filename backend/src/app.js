@@ -13,6 +13,7 @@ const financialMovementRoutes = require(
 const activityRoutes = require("./routes/activityRoutes");
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const deviceRegistrationRoutes = require("./routes/deviceRegistrationRoutes");
 const app = express();
 
 app.use(helmet());
@@ -78,5 +79,6 @@ app.use(
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/device-tokens", deviceRegistrationRoutes);
 
 module.exports = app;

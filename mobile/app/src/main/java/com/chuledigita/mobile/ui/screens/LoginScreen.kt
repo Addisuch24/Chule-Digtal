@@ -332,7 +332,7 @@ fun LoginScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "Set the backend API address. Current computer Wi-Fi IP is: 192.168.137.176",
+                            text = "Set the backend API address. Current computer Wi-Fi IP is: 192.168.188.3",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -352,7 +352,7 @@ fun LoginScreen(
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
-                                Text("Wi-Fi (.176)", style = MaterialTheme.typography.labelSmall)
+                                Text("Wi-Fi (.3)", style = MaterialTheme.typography.labelSmall)
                             }
                             OutlinedButton(
                                 onClick = { serverUrlInput = ApiConfig.EMULATOR_BASE_URL },

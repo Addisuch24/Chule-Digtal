@@ -121,8 +121,7 @@ fun MainScaffold(
                             AppNavigationItem(Screen.Dashboard, Icons.Filled.Home, Icons.Outlined.Home, "Dashboard"),
                             AppNavigationItem(Screen.Notes, Icons.AutoMirrored.Filled.Notes, Icons.AutoMirrored.Outlined.Notes, "Notes"),
                             AppNavigationItem(Screen.Orders, Icons.Filled.ShoppingBag, Icons.Outlined.ShoppingBag, "Orders"),
-                            AppNavigationItem(Screen.Finance, Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "Finance"),
-                            AppNavigationItem(Screen.Profile, Icons.Filled.GridView, Icons.Outlined.GridView, "More")
+                            AppNavigationItem(Screen.Finance, Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "Customer Balance")
                         )
 
                         items.forEach { item ->
@@ -144,8 +143,7 @@ fun MainScaffold(
                                         "Dashboard" -> "ዳሽቦርድ"
                                         "Notes" -> "ማስታወሻዎች"
                                         "Orders" -> "ትዕዛዞች"
-                                        "Finance" -> "ፋይናንስ"
-                                        "More" -> "ተጨማሪ"
+                                        "Customer Balance", "Finance" -> "Customer Balance"
                                         else -> item.label
                                     }
                                     Text(

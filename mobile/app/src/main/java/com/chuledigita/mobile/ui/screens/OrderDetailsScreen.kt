@@ -72,11 +72,16 @@ fun OrderDetailsScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(text = state.message, color = MaterialTheme.colorScheme.error)
-                            Button(
-                                onClick = { viewModel.loadOrder(orderId) },
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.padding(top = 16.dp)
                             ) {
-                                Text("እንደገና ሞክር")
+                                OutlinedButton(onClick = { navController.navigate(com.chuledigita.mobile.ui.navigation.Screen.Orders.route) }) {
+                                    Text("ወደ ትዕዛዞች ዝርዝር")
+                                }
+                                Button(onClick = { viewModel.loadOrder(orderId) }) {
+                                    Text("እንደገና ሞክር")
+                                }
                             }
                         }
                     }

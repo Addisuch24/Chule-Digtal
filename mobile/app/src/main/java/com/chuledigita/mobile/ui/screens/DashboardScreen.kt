@@ -180,7 +180,7 @@ fun DashboardScreen(
                                         value = state.customersCount.toString(),
                                         icon = Icons.Outlined.People,
                                         iconTint = SlateBlue,
-                                        onViewAllClick = { navController.navigate(Screen.Customers.route) }
+                                        onViewAllClick = { navController.navigate(Screen.Finance.route) }
                                     )
 
                                     val isNegative = state.currentBalance < 0
@@ -210,6 +210,7 @@ fun DashboardScreen(
                                 ) {
                                     val formattedDebit = "− ${abs(state.totalDebit).toInt()} ETB"
                                     Surface(
+                                        onClick = { navController.navigate(Screen.Finance.route) },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(16.dp),
                                         color = PureWhiteSurface,
@@ -253,6 +254,7 @@ fun DashboardScreen(
 
                                     val formattedCredit = "+ ${abs(state.totalCredit).toInt()} ETB"
                                     Surface(
+                                        onClick = { navController.navigate(Screen.Finance.route) },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(16.dp),
                                         color = PureWhiteSurface,
@@ -323,6 +325,7 @@ private fun DashboardNavMetricCard(
     actionText: String = "View all"
 ) {
     Surface(
+        onClick = onViewAllClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color = PureWhiteSurface,

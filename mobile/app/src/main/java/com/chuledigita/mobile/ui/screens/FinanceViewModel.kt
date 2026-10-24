@@ -18,19 +18,74 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class BalanceStatusType {
+    TEBEDRUWAL,  // Debt: balance < 0, red highlight
+    KER_HISAB,    // Credit: balance > 0, green highlight
+    KEFLUWAL,     // Settled: last movement was CREDIT, normal/default color
+    TEKEBLUWAL,   // Settled: last movement was DEBIT, normal/default color
+    SETTLED       // Settled: no history, normal/default color
+}
+
+data class CustomerBalanceStatus(
+    val type: BalanceStatusType,
+    val amharicLabel: String,
+    val displayLabel: String
+)
+
 data class CustomerBalance(
     val customerId: String,
     val customerName: String,
     val customerPhone: String?,
     val balance: Double,
-    val movements: List<FinancialMovement>
-)
+    val movements: List<FinancialMovement>,
+    val status: CustomerBalanceStatus = computeStatus(balance, movements)
+) {
+    companion object {
+        fun computeStatus(balance: Double, movements: List<FinancialMovement>): CustomerBalanceStatus {
+            return when {
+                balance < 0.0 -> CustomerBalanceStatus(
+                    type = BalanceStatusType.TEBEDRUWAL,
+                    amharicLabel = "ተበድሩዋል",
+                    displayLabel = "ተበድሩዋል (Tebedruwal)"
+                )
+                balance > 0.0 -> CustomerBalanceStatus(
+                    type = BalanceStatusType.KER_HISAB,
+                    amharicLabel = "ቀር ሂሳብ",
+                    displayLabel = "ቀር ሂሳብ (Ker Hisab)"
+                )
+                else -> {
+                    val nonRejected = movements
+                        .filter { it.verificationStatus != VerificationStatus.REJECTED }
+                    val lastMovement = nonRejected.firstOrNull()
+                    when {
+                        lastMovement == null -> CustomerBalanceStatus(
+                            type = BalanceStatusType.SETTLED,
+                            amharicLabel = "ተስተካክሏል",
+                            displayLabel = "ተስተካክሏል (Settled)"
+                        )
+                        lastMovement.type == MovementType.CREDIT -> CustomerBalanceStatus(
+                            type = BalanceStatusType.KEFLUWAL,
+                            amharicLabel = "ከፍለዋል",
+                            displayLabel = "ከፍለዋል (Kefluwal)"
+                        )
+                        else -> CustomerBalanceStatus(
+                            type = BalanceStatusType.TEKEBLUWAL,
+                            amharicLabel = "ተቀብለዋል",
+                            displayLabel = "ተቀብለዋል (Tekebluwal)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 sealed interface FinanceUiState {
     data object Loading : FinanceUiState
     data class Success(
         val customersWhoOwe: List<CustomerBalance>,
         val customersWithCredit: List<CustomerBalance>,
+        val customersSettled: List<CustomerBalance> = emptyList(),
         val totalMovementCount: Int,
         val searchQuery: String = "",
         val successMessage: String? = null,
@@ -135,10 +190,12 @@ class FinanceViewModel(
 
         val whoOwe = filteredBalances.filter { it.balance < 0 }.sortedBy { it.balance }
         val withCredit = filteredBalances.filter { it.balance > 0 }.sortedByDescending { it.balance }
+        val settled = filteredBalances.filter { it.balance == 0.0 }.sortedBy { it.customerName }
 
         _uiState.value = FinanceUiState.Success(
             customersWhoOwe = whoOwe,
             customersWithCredit = withCredit,
+            customersSettled = settled,
             totalMovementCount = allMovements.size,
             searchQuery = query,
             successMessage = successMsg
@@ -251,6 +308,66 @@ class FinanceViewModel(
                 if (updatedState is FinanceUiState.Success) {
                     _uiState.value = updatedState.copy(
                         errorMessage = result.exceptionOrNull()?.message ?: "ደንበኛውን መሰረዝ አልተቻለም።"
+                    )
+                }
+            }
+        }
+    }
+
+    fun updateCustomer(customerId: String, name: String, phone: String?) {
+        viewModelScope.launch {
+            val result = customerRepository.updateCustomer(customerId, name, phone)
+            if (result.isSuccess) {
+                val updated = result.getOrNull()
+                if (updated != null) {
+                    allCustomers = allCustomers.map { if (it.id == customerId) updated else it }
+                }
+                val updatedState = _uiState.value
+                if (updatedState is FinanceUiState.Success) {
+                    _uiState.value = updatedState.copy(successMessage = "የደንበኛ መረጃ በተሳካ ሁኔታ ተስተካክሏል።")
+                }
+                updateCalculatedState((_uiState.value as? FinanceUiState.Success)?.searchQuery ?: "")
+            } else {
+                val updatedState = _uiState.value
+                if (updatedState is FinanceUiState.Success) {
+                    _uiState.value = updatedState.copy(
+                        errorMessage = result.exceptionOrNull()?.message ?: "የደንበኛ መረጃ ማስተካከል አልተቻለም።"
+                    )
+                }
+            }
+        }
+    }
+
+    fun settleCustomer(customerId: String, amount: Double, isDebt: Boolean, note: String? = null) {
+        viewModelScope.launch {
+            val type = if (isDebt) MovementType.CREDIT else MovementType.DEBIT
+            val absAmount = kotlin.math.abs(amount)
+            val defaultDesc = if (isDebt) "የዕዳ ክፍያ (ከፍለዋል)" else "የቀሪ ብር ክፍያ (ተቀብለዋል)"
+            val desc = note?.ifBlank { defaultDesc } ?: defaultDesc
+
+            val result = financialRepository.createMovement(
+                customerId = customerId,
+                amount = absAmount,
+                type = type,
+                description = desc
+            )
+            if (result.isSuccess) {
+                val newMov = result.getOrNull()
+                if (newMov != null) {
+                    allMovements = listOf(newMov) + allMovements
+                }
+                val updatedState = _uiState.value
+                if (updatedState is FinanceUiState.Success) {
+                    _uiState.value = updatedState.copy(
+                        successMessage = if (isDebt) "የዕዳ ክፍያ ተመዝግቧል (ከፍለዋል)።" else "ክፍያ ተመዝግቧል (ተቀብለዋል)።"
+                    )
+                }
+                updateCalculatedState((_uiState.value as? FinanceUiState.Success)?.searchQuery ?: "")
+            } else {
+                val updatedState = _uiState.value
+                if (updatedState is FinanceUiState.Success) {
+                    _uiState.value = updatedState.copy(
+                        errorMessage = result.exceptionOrNull()?.message ?: "ክፍያውን መመዝገብ አልተቻለም።"
                     )
                 }
             }

@@ -44,9 +44,19 @@ interface NotificationRepository {
     suspend fun markAllAsRead(): Result<Unit>
 
     /**
+     * Deletes a single notification for the current authenticated recipient.
+     */
+    suspend fun deleteNotification(notificationId: String): Result<Unit>
+
+    /**
      * Deletes multiple notifications for the current authenticated recipient.
      */
     suspend fun bulkDeleteNotifications(notificationIds: List<String>): Result<com.chuledigita.mobile.data.remote.model.BulkDeleteData>
+
+    /**
+     * Deletes all notifications for the current authenticated recipient.
+     */
+    suspend fun deleteAllNotifications(): Result<Unit>
 
     /**
      * Starts the real-time notification listener.

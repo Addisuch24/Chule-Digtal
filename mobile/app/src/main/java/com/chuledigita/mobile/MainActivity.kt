@@ -24,6 +24,11 @@ class MainActivity : ComponentActivity() {
         // Gracefully handled; if granted, background notifications will be posted
     }
 
+    val intentFlow = kotlinx.coroutines.flow.MutableSharedFlow<android.content.Intent>(
+        replay = 1,
+        extraBufferCapacity = 5
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -40,9 +45,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        intent?.let { intentFlow.tryEmit(it) }
+
         setContent {
             ChuleDigitalTheme {
-                AppNavigation()
+                AppNavigation(activityIntentFlow = intentFlow)
             }
         }
     }
@@ -55,5 +62,11 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         SystemNotificationHelper.isAppInForeground.set(false)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intentFlow.tryEmit(intent)
     }
 }

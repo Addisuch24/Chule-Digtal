@@ -69,11 +69,16 @@ fun FinancialMovementDetailsScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(text = state.message, color = MaterialTheme.colorScheme.error)
-                            Button(
-                                onClick = { viewModel.loadMovement(movementId) },
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.padding(top = 16.dp)
                             ) {
-                                Text("እንደገና ሞክር")
+                                OutlinedButton(onClick = { navController.navigate(com.chuledigita.mobile.ui.navigation.Screen.Finance.route) }) {
+                                    Text("ወደ ፋይናንስ ተመለስ")
+                                }
+                                Button(onClick = { viewModel.loadMovement(movementId) }) {
+                                    Text("እንደገና ሞክር")
+                                }
                             }
                         }
                     }

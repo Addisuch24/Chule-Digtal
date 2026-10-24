@@ -20,6 +20,17 @@ val WarningColor = Color(0xFFD99A26)
 val ErrorColor = Color(0xFFD94A4A)
 val InfoColor = Color(0xFF0F8B8D)
 
+// Customer Balance — Balance-Based Color Branding (Web + Android consistent)
+val BalancePositiveBlue = Color(0xFF2878D4)      // Primary blue for positive balances (+)
+val BalancePositiveBg = Color(0xFFEAF3FF)        // Light blue background for positive balance cards
+val BalanceNegativeRed = Color(0xFFDC2626)       // Primary red for negative balances (−)
+val BalanceNegativeBg = Color(0xFFFEF2F2)        // Light red background for negative balance cards
+val BalanceZeroBg = Color(0xFFFFFFFF)            // White background for zero balances (0)
+val BalanceZeroBorder = Color(0xFFE2E8F0)        // Neutral border for zero balances
+val BalanceDarkText = Color(0xFF172B43)          // Dark text with sufficient contrast
+val BalanceSettledText = Color(0xFF475569)       // Settled status label text
+val BalanceSettledBg = Color(0xFFF8FAFC)         // Settled status badge background
+
 // Backward-compatibility aliases
 val BrandGreen = EmeraldGreen
 val WarmOffWhite = OffWhiteBg

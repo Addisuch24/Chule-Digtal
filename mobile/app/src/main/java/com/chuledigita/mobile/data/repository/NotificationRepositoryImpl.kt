@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Collections
 import org.json.JSONObject
 
 /**
@@ -49,6 +50,9 @@ class NotificationRepositoryImpl(
     private val _realtimeEventFlow = MutableSharedFlow<NotificationItem>(replay = 0, extraBufferCapacity = 64)
     override val realtimeEventFlow: SharedFlow<NotificationItem> = _realtimeEventFlow.asSharedFlow()
 
+    // Thread-safe client-side tombstone set to prevent in-flight or replayed socket events from resurrecting deleted notifications
+    val deletedNotificationIds: MutableSet<String> = Collections.synchronizedSet(mutableSetOf<String>())
+
     init {
         // 1. Session Lifecycle: Connect/Disconnect socket and fetch initial state
         scope.launch {
@@ -59,6 +63,7 @@ class NotificationRepositoryImpl(
                 } else {
                     socketManager.disconnect()
                     inAppNotificationManager.clearSession()
+                    deletedNotificationIds.clear()
                     _notifications.value = emptyList()
                     _unreadCount.value = 0
                 }
@@ -71,6 +76,30 @@ class NotificationRepositoryImpl(
                 if (event == SocketManager.EVENT_CONNECTED) {
                     refreshNotificationsInternal(isRecovery = true)
                 }
+            }
+        }
+
+        // 3. Multi-Device Real-time Deletion Synchronization
+        scope.launch {
+            socketManager.notificationDeletedFlow.collect { deletedId ->
+                deletedNotificationIds.add(deletedId)
+                _notifications.value = _notifications.value.filter { it.id != deletedId }
+                updateUnreadCountLocally()
+            }
+        }
+
+        scope.launch {
+            socketManager.notificationBulkDeletedFlow.collect { deletedIds ->
+                deletedNotificationIds.addAll(deletedIds)
+                _notifications.value = _notifications.value.filter { it.id !in deletedIds }
+                updateUnreadCountLocally()
+            }
+        }
+
+        scope.launch {
+            socketManager.notificationAllDeletedFlow.collect {
+                _notifications.value = emptyList()
+                updateUnreadCountLocally()
             }
         }
     }
@@ -89,13 +118,14 @@ class NotificationRepositoryImpl(
                 val dtoList = response.body()?.data ?: emptyList()
                 val serverList = dtoList.map { it.toDomain() }
 
-                // Detect unread notifications that were not yet presented in this session
-                val unreadRecovery = serverList.filter { !it.isRead && !inAppNotificationManager.presentedNotificationIds.contains(it.id) }
+                // Filter out any notifications that have been persistently deleted in this session
+                val filteredList = serverList.filter { it.id !in deletedNotificationIds }
 
-                // Merge server list with local state, deduplicating by persistent ID
-                _notifications.value = (serverList + _notifications.value)
-                    .distinctBy { it.id }
-                    .sortedByDescending { it.id.toLongOrNull() ?: 0L }
+                // Detect unread notifications that were not yet presented in this session
+                val unreadRecovery = filteredList.filter { !it.isRead && !inAppNotificationManager.presentedNotificationIds.contains(it.id) }
+
+                // Update local state with authoritative list from server (removes deleted notifications)
+                _notifications.value = filteredList.sortedByDescending { it.id.toLongOrNull() ?: 0L }
 
                 updateUnreadCountLocally()
 
@@ -174,9 +204,13 @@ class NotificationRepositoryImpl(
             val response = apiService.bulkDeleteNotifications(request)
             if (response.isSuccessful && response.body()?.success == true) {
                 val data = response.body()?.data ?: com.chuledigita.mobile.data.remote.model.BulkDeleteData(deletedCount = 0)
+                val actuallyDeleted = data.deletedIds.map { it.toString() }.ifEmpty { notificationIds }
+                deletedNotificationIds.addAll(actuallyDeleted)
                 // Remove deleted notifications from local state and update unread count
-                _notifications.value = _notifications.value.filter { it.id !in notificationIds }
+                _notifications.value = _notifications.value.filter { it.id !in actuallyDeleted }
                 updateUnreadCountLocally()
+                // Refresh authoritative list from server
+                refreshNotificationsInternal(isRecovery = false)
                 Result.success(data)
             } else {
                 val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete notifications")
@@ -184,6 +218,44 @@ class NotificationRepositoryImpl(
             }
         } catch (e: Exception) {
             Result.failure(Exception("Network error while deleting notifications: ${e.message}"))
+        }
+    }
+
+    override suspend fun deleteNotification(notificationId: String): Result<Unit> {
+        return try {
+            val idLong = notificationId.toLongOrNull() ?: return Result.failure(Exception("Invalid ID"))
+            val response = apiService.deleteNotification(idLong)
+            if (response.isSuccessful) {
+                deletedNotificationIds.add(notificationId)
+                _notifications.value = _notifications.value.filter { it.id != notificationId }
+                updateUnreadCountLocally()
+                // Refresh authoritative list from server
+                refreshNotificationsInternal(isRecovery = false)
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete notification")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting notification: ${e.message}"))
+        }
+    }
+
+    override suspend fun deleteAllNotifications(): Result<Unit> {
+        return try {
+            val response = apiService.deleteAllNotifications()
+            if (response.isSuccessful) {
+                _notifications.value = emptyList()
+                updateUnreadCountLocally()
+                // Refresh authoritative list from server
+                refreshNotificationsInternal(isRecovery = false)
+                Result.success(Unit)
+            } else {
+                val errorMsg = parseErrorMessage(response.errorBody()?.string(), "Failed to delete all notifications")
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error while deleting all notifications: ${e.message}"))
         }
     }
 
@@ -224,7 +296,13 @@ class NotificationRepositoryImpl(
                 return
             }
 
-            // 3. Deduplication check against local state
+            // 3. Drop notification if it was persistently deleted on this client
+            if (deletedNotificationIds.contains(idStr)) {
+                Log.d("NotificationRepo", "Notification $idStr was deleted; ignoring incoming socket notification")
+                return
+            }
+
+            // 4. Deduplication check against local state
             if (_notifications.value.any { it.id == idStr }) {
                 Log.d("NotificationRepo", "Duplicate notification $idStr ignored")
                 return

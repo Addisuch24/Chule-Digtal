@@ -42,6 +42,7 @@ router.get(
 );
 router.post("/bulk-delete", notificationController.deleteNotifications);
 router.delete("/bulk", notificationController.deleteNotifications);
+router.delete("/all", notificationController.deleteAllNotifications);
 router.delete("/:notificationId", notificationController.deleteNotification);
 
 router.get(

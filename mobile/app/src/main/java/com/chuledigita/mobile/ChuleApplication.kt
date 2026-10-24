@@ -26,5 +26,8 @@ class ChuleApplication : Application() {
         MockDataProvider.seedMockData()
 
         container = DefaultAppContainer(this)
+
+        // Register device push token independently of screen and auth session
+        container.deviceTokenManager.registerDevice()
     }
 }

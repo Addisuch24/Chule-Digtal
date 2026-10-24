@@ -26,6 +26,10 @@ async function recordActivity({
       SELECT id
       FROM family_members
       WHERE is_active = TRUE
+        AND username NOT LIKE 'test_%'
+        AND username NOT LIKE 'integ_test_%'
+        AND username NOT LIKE 'audit_user_%'
+        AND username NOT LIKE 'realtime_user_%'
         AND id <> ?
     `,
     [actorId]

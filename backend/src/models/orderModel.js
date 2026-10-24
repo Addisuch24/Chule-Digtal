@@ -14,9 +14,10 @@ async function createOrder({
         order_number,
         title,
         description,
+        order_status,
         taken_by
       )
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, 'PENDING', ?)
     `,
     [
       customerId,
@@ -36,6 +37,7 @@ async function createOrder({
         o.order_number,
         o.title,
         o.description,
+        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
         o.created_at,
@@ -64,6 +66,7 @@ async function getOrderById(orderId) {
         o.order_number,
         o.title,
         o.description,
+        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
         o.created_at,
@@ -96,6 +99,7 @@ async function getAllOrders() {
         o.order_number,
         o.title,
         o.description,
+        o.order_status,
         o.taken_by,
         fm.full_name AS taken_by_name,
         o.created_at,
@@ -367,9 +371,11 @@ async function updateOrderStatus({
     };
   }
 
-  if (order.order_status === "COMPLETED") {
+  if (order.order_status === orderStatus) {
     return {
-      type: "ALREADY_COMPLETED",
+      type: "SUCCESS",
+      order,
+      previousStatus,
     };
   }
 

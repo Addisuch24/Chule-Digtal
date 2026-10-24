@@ -38,6 +38,8 @@ interface AppContainer {
     val socketManager: SocketManager
     val notificationRepository: NotificationRepository
     val financialRepository: FinancialRepository
+    val notificationNavigationManager: com.chuledigita.mobile.notifications.NotificationNavigationManager
+    val deviceTokenManager: com.chuledigita.mobile.notifications.DeviceTokenManager
 }
 
 /**
@@ -94,5 +96,13 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         ).apply {
             startRealTimeSync()
         }
+    }
+
+    override val notificationNavigationManager: com.chuledigita.mobile.notifications.NotificationNavigationManager by lazy {
+        com.chuledigita.mobile.notifications.NotificationNavigationManager(context)
+    }
+
+    override val deviceTokenManager: com.chuledigita.mobile.notifications.DeviceTokenManager by lazy {
+        com.chuledigita.mobile.notifications.DeviceTokenManager(context, apiService)
     }
 }

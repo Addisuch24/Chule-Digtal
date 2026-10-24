@@ -609,8 +609,8 @@ private fun OrderCardItem(
                     Text(
                         text = order.title ?: order.orderNumber,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandNavy,
+                        fontWeight = if (isCompleted) FontWeight.Normal else FontWeight.Bold,
+                        color = if (isCompleted) ErrorColor.copy(alpha = 0.55f) else EmeraldGreen,
                         textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -636,13 +636,13 @@ private fun OrderCardItem(
                             fontWeight = FontWeight.Bold
                         )
                         Surface(
-                            color = if (isCompleted) LightMint else Color(0xFFFEF3C7),
+                            color = if (isCompleted) ErrorColor.copy(alpha = 0.1f) else LightMint,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 text = if (isCompleted) "ተጠናቋል (Completed)" else "በመጠባበቅ ላይ (Pending)",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (isCompleted) EmeraldGreen else WarningColor,
+                                color = if (isCompleted) ErrorColor.copy(alpha = 0.7f) else EmeraldGreen,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
@@ -664,34 +664,38 @@ private fun OrderCardItem(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false }
                     ) {
+                        // Change state toggle button inside three dots right most
                         DropdownMenuItem(
-                            text = { Text("አስተካክል") },
+                            text = {
+                                Text(
+                                    if (isCompleted) "ወደ መጠባበቅ ቀይር (Mark as Pending)"
+                                    else "እንደተጠናቀቀ ምልክት አድርግ (Mark as Completed)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isCompleted) WarningColor else EmeraldGreen
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onStatusChange(if (isCompleted) OrderStatus.PENDING else OrderStatus.COMPLETED)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isCompleted) Icons.Default.Refresh else Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (isCompleted) WarningColor else EmeraldGreen
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("አስተካክል (Edit)") },
                             onClick = {
                                 menuExpanded = false
                                 onEdit()
                             },
                             leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = BrandGreen) }
                         )
-                        if (!isCompleted) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text("እንደተጠናቀቀ ምልክት አድርግ")
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onStatusChange(OrderStatus.COMPLETED)
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = SuccessColor
-                                    )
-                                }
-                            )
-                        }
                         DropdownMenuItem(
-                            text = { Text("ሰርዝ", color = ErrorColor) },
+                            text = { Text("ሰርዝ (Delete)", color = ErrorColor) },
                             onClick = {
                                 menuExpanded = false
                                 onDelete()

@@ -24,6 +24,9 @@ function CustomerDetails() {
   const [message, setMessage] = useState("");
 
   const [selectedNoteIds, setSelectedNoteIds] = useState([]);
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   const loadCustomerData = useCallback(async (showSpinner = false) => {
     if (!customerId || customerId === "undefined") {
@@ -175,6 +178,35 @@ function CustomerDetails() {
     }
   }
 
+  async function handleSaveCustomerEdit(event) {
+    event.preventDefault();
+    if (!customer?.id) return;
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      setError("Customer name cannot be empty.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      setError("");
+      setMessage("");
+      await api.patch(`/customers/${customer.id}`, {
+        full_name: trimmed,
+        phone: editPhone.trim() || null,
+      });
+      setMessage("Customer updated successfully.");
+      setEditingCustomer(false);
+      await loadCustomerData();
+    } catch (requestError) {
+      console.error("Update customer error:", requestError);
+      setError(
+        requestError.response?.data?.message || "Failed to update customer."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) return <FeedbackState type="loading" title="Loading customer profile..." />;
   if (error && !customer)
     return (
@@ -233,7 +265,7 @@ function CustomerDetails() {
         </div>
       </section>
 
-      <div className="action-row">
+      <div className="action-row" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link className="button" to={`/orders?customerId=${customer.id}`}>
           Create order <span aria-hidden="true">-&gt;</span>
         </Link>
@@ -243,24 +275,36 @@ function CustomerDetails() {
         >
           Record financial movement
         </Link>
-        <button
-          type="button"
-          className="button button-danger"
-          style={{
-            backgroundColor: "#ef4444",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "0.6rem 1.2rem",
-            cursor: "pointer",
-            fontWeight: 600,
-            marginLeft: "auto",
-          }}
-          onClick={handleDeleteCustomer}
-          disabled={submitting}
-        >
-          {submitting ? "Deleting..." : "Delete Customer"}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => {
+              setEditName(customer.full_name || "");
+              setEditPhone(customer.phone || "");
+              setEditingCustomer(true);
+            }}
+          >
+            Edit Customer
+          </button>
+          <button
+            type="button"
+            className="button button-danger"
+            style={{
+              backgroundColor: "#ef4444",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "0.6rem 1.2rem",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+            onClick={handleDeleteCustomer}
+            disabled={submitting}
+          >
+            {submitting ? "Deleting..." : "Delete Customer"}
+          </button>
+        </div>
       </div>
 
       {error && <p className="alert alert-error">{error}</p>}
@@ -412,6 +456,61 @@ function CustomerDetails() {
           )}
         </div>
       </section>
+      {editingCustomer && (
+        <div className="modal-backdrop" onClick={() => setEditingCustomer(false)}>
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-customer-dialog-title"
+          >
+            <div className="modal-header">
+              <h3 id="edit-customer-dialog-title">Edit Customer</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setEditingCustomer(false)}
+                aria-label="Close dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleSaveCustomerEdit} className="form-stack">
+              <label>
+                Customer Name
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Phone Number <span className="muted">(optional)</span>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="09..."
+                />
+              </label>
+              <div className="action-row" style={{ marginTop: "1rem" }}>
+                <button type="submit" disabled={submitting}>
+                  {submitting ? "Saving..." : "Save changes"}
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setEditingCustomer(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
