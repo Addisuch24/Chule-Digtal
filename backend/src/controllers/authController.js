@@ -36,7 +36,7 @@ async function login(req, res) {
       data: result,
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[AUTH DIAGNOSTIC] Login exception:", error.message);
 
     return res.status(500).json({
       success: false,
@@ -132,8 +132,11 @@ async function register(req, res) {
       });
     }
 
-    if (error.code === "ER_DUP_ENTRY") {
-      if (error.message && error.message.includes("email")) {
+    if (error.code === "ER_DUP_ENTRY" || error.code === "23505") {
+      const isEmail =
+        (error.message && error.message.includes("email")) ||
+        (error.detail && error.detail.includes("email"));
+      if (isEmail) {
         return res.status(409).json({
           success: false,
           message: "Google account email is already registered",

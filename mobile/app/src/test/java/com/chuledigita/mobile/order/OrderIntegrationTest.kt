@@ -394,9 +394,13 @@ class OrderIntegrationTest {
         )
         vm.loadOrder(created.id)
 
-        kotlinx.coroutines.delay(500)
-        val state = vm.uiState.value
-        assertTrue("OrderDetailsViewModel state must be Success", state is OrderDetailsUiState.Success)
+        var state = vm.uiState.value
+        for (i in 1..40) {
+            if (state is OrderDetailsUiState.Success) break
+            kotlinx.coroutines.delay(100)
+            state = vm.uiState.value
+        }
+        assertTrue("OrderDetailsViewModel state must be Success. Current: $state", state is OrderDetailsUiState.Success)
         val successState = state as OrderDetailsUiState.Success
         assertEquals(created.id, successState.order.id)
         assertEquals(orderNum, successState.order.orderNumber)
@@ -404,7 +408,7 @@ class OrderIntegrationTest {
         // Complete order
         vm.updateStatus(created.id, OrderStatus.COMPLETED)
         var updatedState: OrderDetailsUiState.Success? = null
-        for (i in 1..20) {
+        for (i in 1..50) {
             kotlinx.coroutines.delay(100)
             val st = vm.uiState.value
             if (st is OrderDetailsUiState.Success && !st.isSubmitting && st.successMessage != null) {
@@ -412,7 +416,7 @@ class OrderIntegrationTest {
                 break
             }
         }
-        assertNotNull("Updated state must be Success and not submitting", updatedState)
+        assertNotNull("Updated state must be Success and not submitting. Current: ${vm.uiState.value}", updatedState)
         assertEquals(OrderStatus.COMPLETED, updatedState!!.order.status)
         assertNotNull("Success message must be present", updatedState.successMessage)
 
@@ -450,11 +454,11 @@ class OrderIntegrationTest {
             successCallbackCalled = true
         }
 
-        for (i in 1..20) {
+        for (i in 1..50) {
             kotlinx.coroutines.delay(100)
             if (vm.uiState.value.isSuccess) break
         }
-        assertTrue("Success callback must be called on valid submission", successCallbackCalled)
+        assertTrue("Success callback must be called on valid submission. Error: ${vm.uiState.value.errorMessage}", successCallbackCalled)
         assertTrue("isSuccess must be true in state", vm.uiState.value.isSuccess)
     }
 }

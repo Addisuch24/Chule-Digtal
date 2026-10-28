@@ -75,22 +75,24 @@ fun LoginScreen(
         // Decorative fluid wave background
         AuthBackgroundWaves(modifier = Modifier.fillMaxSize())
 
-        // Quick Server Settings Button in top right
-        IconButton(
-            onClick = {
-                serverUrlInput = ApiConfig.BASE_URL
-                showServerConfigDialog = true
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-                .statusBarsPadding()
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = "Server Settings",
-                tint = BrandNavy.copy(alpha = 0.5f)
-            )
+        // Quick Server Settings Button in top right (Debug only)
+        if (com.chuledigita.mobile.BuildConfig.DEBUG) {
+            IconButton(
+                onClick = {
+                    serverUrlInput = ApiConfig.BASE_URL
+                    showServerConfigDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .statusBarsPadding()
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Settings,
+                    contentDescription = "Server Settings",
+                    tint = BrandNavy.copy(alpha = 0.5f)
+                )
+            }
         }
 
         Column(
@@ -189,23 +191,25 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
-                                ) {
-                                    TextButton(
-                                        onClick = {
-                                            serverUrlInput = ApiConfig.BASE_URL
-                                            showServerConfigDialog = true
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                if (com.chuledigita.mobile.BuildConfig.DEBUG) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
                                     ) {
-                                        Text(
-                                            text = "Change Server IP",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BrandNavy
-                                        )
+                                        TextButton(
+                                            onClick = {
+                                                serverUrlInput = ApiConfig.BASE_URL
+                                                showServerConfigDialog = true
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Change Server IP",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandNavy
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -332,7 +336,7 @@ fun LoginScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "Set the backend API address. Current computer Wi-Fi IP is: 192.168.188.3",
+                            text = "Set backend API address. Hotspot IP: 192.168.137.176 | Wi-Fi IP: 192.168.188.3",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -345,19 +349,26 @@ fun LoginScreen(
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { serverUrlInput = ApiConfig.LAN_BASE_URL },
+                                onClick = { serverUrlInput = ApiConfig.HOTSPOT_BASE_URL },
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+                            ) {
+                                Text("Hotspot (.176)", style = MaterialTheme.typography.labelSmall)
+                            }
+                            OutlinedButton(
+                                onClick = { serverUrlInput = ApiConfig.WIFI_BASE_URL },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Text("Wi-Fi (.3)", style = MaterialTheme.typography.labelSmall)
                             }
                             OutlinedButton(
                                 onClick = { serverUrlInput = ApiConfig.EMULATOR_BASE_URL },
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Text("Emulator", style = MaterialTheme.typography.labelSmall)
                             }

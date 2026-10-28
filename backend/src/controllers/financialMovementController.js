@@ -29,16 +29,16 @@ async function createFinancialMovement(req, res) {
     }
 
     // Check that the customer exists
-    const [customers] = await require("../config/db").execute(
+    const customers = await require("../config/db").query(
       `
         SELECT id
         FROM customers
-        WHERE id = ?
+        WHERE id = $1
       `,
       [Number(customerId)]
     );
 
-    if (customers.length === 0) {
+    if (customers.rows.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Customer not found",
@@ -80,17 +80,17 @@ async function createFinancialMovement(req, res) {
     }
 
     // Check that authenticated family member exists and is active
-    const [familyMembers] = await require("../config/db").execute(
+    const familyMembers = await require("../config/db").query(
       `
         SELECT id
         FROM family_members
-        WHERE id = ?
-          AND is_active = TRUE
+        WHERE id = $1
+          AND is_active = 1
       `,
       [Number(recordedBy)]
     );
 
-    if (familyMembers.length === 0) {
+    if (familyMembers.rows.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Authenticated family member not found or inactive",
@@ -445,17 +445,17 @@ async function verifyFinancialMovement(req, res) {
     }
 
     // Check that verifier exists and is active
-    const [familyMembers] = await require("../config/db").execute(
+    const familyMembers = await require("../config/db").query(
       `
         SELECT id
         FROM family_members
-        WHERE id = ?
-          AND is_active = TRUE
+        WHERE id = $1
+          AND is_active = 1
       `,
       [Number(verifiedBy)]
     );
 
-    if (familyMembers.length === 0) {
+    if (familyMembers.rows.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Authenticated family member not found or inactive",
@@ -545,17 +545,17 @@ async function rejectFinancialMovement(req, res) {
     }
 
     // Check that verifier exists and is active
-    const [familyMembers] = await require("../config/db").execute(
+    const familyMembers = await require("../config/db").query(
       `
         SELECT id
         FROM family_members
-        WHERE id = ?
-          AND is_active = TRUE
+        WHERE id = $1
+          AND is_active = 1
       `,
       [Number(verifiedBy)]
     );
 
-    if (familyMembers.length === 0) {
+    if (familyMembers.rows.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Authenticated family member not found or inactive",
@@ -697,16 +697,16 @@ async function createPayment(req, res) {
     const db = require("../config/db");
 
     // Check customer exists
-    const [customers] = await db.execute(
+    const customers = await db.query(
       `
         SELECT id
         FROM customers
-        WHERE id = ?
+        WHERE id = $1
       `,
       [Number(customerId)]
     );
 
-    if (customers.length === 0) {
+    if (customers.rows.length === 0) {
       return res.status(400).json({
         success: false,
         message: "Customer not found",
@@ -714,17 +714,17 @@ async function createPayment(req, res) {
     }
 
     // Check authenticated family member exists and is active
-    const [familyMembers] = await db.execute(
+    const familyMembers = await db.query(
       `
         SELECT id
         FROM family_members
-        WHERE id = ?
-          AND is_active = TRUE
+        WHERE id = $1
+          AND is_active = 1
       `,
       [Number(recordedBy)]
     );
 
-    if (familyMembers.length === 0) {
+    if (familyMembers.rows.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Authenticated family member not found or inactive",

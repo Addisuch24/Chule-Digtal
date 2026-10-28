@@ -5,19 +5,22 @@ async function createCustomerNote({
   noteText,
   createdBy,
 }) {
-  const [result] = await pool.execute(
+  const insertResult = await pool.query(
     `
       INSERT INTO customer_notes (
         customer_id,
         note_text,
         created_by
       )
-      VALUES (?, ?, ?)
+      VALUES ($1, $2, $3)
+      RETURNING id
     `,
     [customerId, noteText, createdBy]
   );
 
-  const [rows] = await pool.execute(
+  const newId = insertResult.rows[0].id;
+
+  const result = await pool.query(
     `
       SELECT
         n.id,
@@ -34,15 +37,16 @@ async function createCustomerNote({
       FROM customer_notes n
       JOIN family_members fm
         ON fm.id = n.created_by
-      WHERE n.id = ?
+      WHERE n.id = $1
     `,
-    [result.insertId]
+    [newId]
   );
 
-  return rows[0];
+  return result.rows[0];
 }
+
 async function getCustomerNotes(customerId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         n.id,
@@ -59,20 +63,21 @@ async function getCustomerNotes(customerId) {
       FROM customer_notes n
       JOIN family_members fm
         ON fm.id = n.created_by
-      WHERE n.customer_id = ?
+      WHERE n.customer_id = $1
       ORDER BY n.created_at DESC
     `,
     [customerId]
   );
 
-  return rows;
+  return result.rows;
 }
+
 async function deleteCustomerNote(noteId) {
-  const [result] = await pool.execute(
-    "DELETE FROM customer_notes WHERE id = ?",
+  const result = await pool.query(
+    "DELETE FROM customer_notes WHERE id = $1",
     [noteId]
   );
-  return result.affectedRows > 0;
+  return result.rowCount > 0;
 }
 
 async function deleteCustomerNotes(noteIds) {
@@ -80,14 +85,19 @@ async function deleteCustomerNotes(noteIds) {
     return { deletedCount: 0, deletedIds: [] };
   }
 
-  const [result] = await pool.query(
-    "DELETE FROM customer_notes WHERE id IN (?)",
-    [noteIds]
+  const validIds = noteIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (validIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [] };
+  }
+
+  const result = await pool.query(
+    "DELETE FROM customer_notes WHERE id = ANY($1::bigint[])",
+    [validIds]
   );
 
   return {
-    deletedCount: result.affectedRows,
-    deletedIds: noteIds,
+    deletedCount: result.rowCount,
+    deletedIds: validIds,
   };
 }
 

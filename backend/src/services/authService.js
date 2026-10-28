@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const authModel = require("../models/authModel");
+const { getJwtSecret } = require("../config/env");
 
 async function login(username, password) {
   const normalizedUsername = username ? username.trim().toLowerCase() : "";
@@ -30,7 +31,7 @@ async function login(username, password) {
 
   console.log(`[AUTH DIAGNOSTIC] Login successful for user '${normalizedUsername}' (ID: ${user.id}).`);
 
-  const secret = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+  const secret = getJwtSecret();
   const token = jwt.sign(
     {
       id: user.id,

@@ -8,7 +8,7 @@ async function createActivity({
   description,
   metadata,
 }) {
-  const [result] = await pool.execute(
+  const result = await pool.query(
     `
       INSERT INTO activities (
         actor_id,
@@ -18,7 +18,8 @@ async function createActivity({
         description,
         metadata
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id
     `,
     [
       actorId,
@@ -31,7 +32,7 @@ async function createActivity({
   );
 
   return {
-    id: result.insertId,
+    id: result.rows[0].id,
     actorId,
     activityType,
     entityType,
@@ -42,7 +43,7 @@ async function createActivity({
 }
 
 async function getActivityById(activityId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         a.id,
@@ -57,16 +58,16 @@ async function getActivityById(activityId) {
       FROM activities a
       JOIN family_members fm
         ON fm.id = a.actor_id
-      WHERE a.id = ?
+      WHERE a.id = $1
     `,
     [activityId]
   );
 
-  return rows[0] || null;
+  return result.rows[0] || null;
 }
 
 async function getAllActivities() {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         a.id,
@@ -85,7 +86,7 @@ async function getAllActivities() {
     `
   );
 
-  return rows;
+  return result.rows;
 }
 
 module.exports = {

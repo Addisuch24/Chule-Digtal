@@ -5,8 +5,10 @@ const http = require("http");
 const pool = require("../src/config/db");
 const notificationModel = require("../src/models/notificationModel");
 const socketClient = require("socket.io-client");
+const { ensureTestServerRunning, stopTestServer } = require("./test_server_helper");
 
-const JWT_SECRET = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+const { getJwtSecret } = require("../src/config/env");
+const JWT_SECRET = getJwtSecret();
 const API_BASE = "http://localhost:5000/api";
 
 function generateToken(userId, username) {
@@ -49,30 +51,31 @@ function apiRequest(path, method = "GET", token, body = null) {
 }
 
 test("Notification Persistence & Regression Test Suite", async (t) => {
+  await ensureTestServerRunning(5000);
   // Setup two test users in family_members
   const timestamp = Date.now();
-  const [resA] = await pool.execute(
-    "INSERT INTO family_members (full_name, username, password_hash) VALUES (?, ?, ?)",
+  const resA = await pool.query(
+    "INSERT INTO family_members (full_name, username, password_hash, is_active) VALUES ($1, $2, $3, 1) RETURNING id",
     [`Test User A ${timestamp}`, `test_a_${timestamp}`, "hash"]
   );
-  const userAId = resA.insertId;
+  const userAId = resA.rows[0].id;
   const tokenA = generateToken(userAId, `test_a_${timestamp}`);
 
-  const [resB] = await pool.execute(
-    "INSERT INTO family_members (full_name, username, password_hash) VALUES (?, ?, ?)",
+  const resB = await pool.query(
+    "INSERT INTO family_members (full_name, username, password_hash, is_active) VALUES ($1, $2, $3, 1) RETURNING id",
     [`Test User B ${timestamp}`, `test_b_${timestamp}`, "hash"]
   );
-  const userBId = resB.insertId;
+  const userBId = resB.rows[0].id;
   const tokenB = generateToken(userBId, `test_b_${timestamp}`);
 
   t.after(async () => {
     try {
-      await pool.execute("DELETE FROM notifications WHERE recipient_id IN (?, ?)", [userAId, userBId]);
-      await pool.execute("DELETE FROM family_members WHERE id IN (?, ?)", [userAId, userBId]);
-      await pool.end();
+      await pool.query("DELETE FROM notifications WHERE recipient_id IN ($1, $2)", [userAId, userBId]);
+      await pool.query("DELETE FROM family_members WHERE id IN ($1, $2)", [userAId, userBId]);
     } catch (e) {
       // ignore
     }
+    await stopTestServer();
   });
 
   await t.test("1. Delete one notification and refresh: it remains deleted", async () => {
@@ -162,13 +165,25 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
       forceNew: true,
     });
 
-    const deletedEventPromise = new Promise((resolve) => {
+    const deletedEventPromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timeout waiting for notification:deleted")), 5000);
       socketB.on("notification:deleted", (payload) => {
+        clearTimeout(timer);
         resolve(payload);
       });
     });
 
-    await new Promise((resolve) => socketB.on("connect", resolve));
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timeout waiting for socket connect")), 5000);
+      socketB.on("connect", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      socketB.on("connect_error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
 
     // Device A deletes notification
     const delRes = await apiRequest(`/notifications/${n.id}`, "DELETE", tokenA);
@@ -228,6 +243,21 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
     // Verify nB still exists
     const checkB = await apiRequest(`/notifications/recipient/${userBId}`, "GET", tokenB);
     assert.ok(checkB.body.data.some((item) => item.id === nB.id));
+
+    // Ownership check: User B can retrieve their own notification
+    const ownGetRes = await apiRequest(`/notifications/${nB.id}`, "GET", tokenB);
+    assert.strictEqual(ownGetRes.status, 200, "Owner must be allowed to view own notification");
+    assert.strictEqual(Number(ownGetRes.body.data.id), Number(nB.id), "Must return correct notification");
+
+    // Ownership check: User A is denied access to User B's notification
+    const crossGetRes = await apiRequest(`/notifications/${nB.id}`, "GET", tokenA);
+    assert.strictEqual(crossGetRes.status, 403, "Non-owner must be rejected with 403 Forbidden");
+    assert.strictEqual(crossGetRes.body.message, "You are not allowed to view this notification");
+
+    // Ownership check: Nonexistent notification returns 404
+    const nonExistentRes = await apiRequest("/notifications/999999999", "GET", tokenA);
+    assert.strictEqual(nonExistentRes.status, 404, "Nonexistent notification must return 404 Not Found");
+    assert.strictEqual(nonExistentRes.body.message, "Notification not found");
   });
 
   await t.test("7. Pagination works without reintroducing deleted records", async () => {

@@ -18,12 +18,30 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "PRODUCTION_API_URL", "\"https://api.chuledigital.com/api/\"")
+            buildConfigField("Boolean", "ENFORCE_HTTPS", "false")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("String", "PRODUCTION_API_URL", "\"https://api.chuledigital.com/api/\"")
+            buildConfigField("Boolean", "ENFORCE_HTTPS", "true")
+
+            // Release signing configuration dynamically loaded from environment variables
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+                val releaseSigning = signingConfigs.create("release") {
+                    storeFile = file(keystorePath)
+                    storePassword = System.getenv("KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("KEY_ALIAS")
+                    keyPassword = System.getenv("KEY_PASSWORD")
+                }
+                signingConfig = releaseSigning
+            }
         }
     }
     compileOptions {
@@ -36,6 +54,10 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 

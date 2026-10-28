@@ -5,6 +5,10 @@ const { Server } = require("socket.io");
 const socketService = require("./services/socketService");
 const app = require("./app");
 const pool = require("./config/db");
+const { validateEnv, getJwtSecret, getCorsOrigin } = require("./config/env");
+
+// Validate environment on server startup
+validateEnv();
 
 const PORT = process.env.PORT || 5000;
 
@@ -16,8 +20,8 @@ async function connectWithRetry(maxRetries = 5, initialDelay = 1000) {
     attempt++;
     let connection = null;
     try {
-      connection = await pool.getConnection();
-      console.log("Database connected successfully!");
+      const res = await pool.query("SELECT current_database(), version()");
+      console.log(`Database connected successfully! Connected to '${res.rows[0].current_database}' on PostgreSQL 17.`);
       return true;
     } catch (error) {
       console.warn(`[DATABASE CONNECT ATTEMPT ${attempt}/${maxRetries} FAILED]: ${error.message}`);
@@ -44,7 +48,8 @@ async function startServer() {
 
     const io = new Server(httpServer, {
       cors: {
-        origin: "*",
+        origin: getCorsOrigin(),
+        credentials: true,
       },
     });
 
@@ -60,7 +65,7 @@ async function startServer() {
           );
         }
 
-        const secret = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+        const secret = getJwtSecret();
         const decoded = jwt.verify(
           token,
           secret
@@ -121,7 +126,7 @@ async function startServer() {
 
   } catch (error) {
     console.error("Fatal startup error:", error.message);
-    console.error("Troubleshooting: Ensure MariaDB/MySQL is running on the configured host and port.");
+    console.error("Troubleshooting: Ensure Supabase PostgreSQL credentials and network connection are properly configured.");
     process.exit(1);
   }
 }

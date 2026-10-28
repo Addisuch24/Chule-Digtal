@@ -1,18 +1,21 @@
 const pool = require("../config/db");
 
 async function createBusinessNote({ noteText, createdBy }) {
-  const [result] = await pool.execute(
+  const insertResult = await pool.query(
     `
       INSERT INTO business_notes (
         note_text,
         created_by
       )
-      VALUES (?, ?)
+      VALUES ($1, $2)
+      RETURNING id
     `,
     [noteText, createdBy]
   );
 
-  const [rows] = await pool.execute(
+  const newId = insertResult.rows[0].id;
+
+  const result = await pool.query(
     `
       SELECT
         bn.id,
@@ -24,16 +27,16 @@ async function createBusinessNote({ noteText, createdBy }) {
       FROM business_notes bn
       JOIN family_members fm
         ON fm.id = bn.created_by
-      WHERE bn.id = ?
+      WHERE bn.id = $1
     `,
-    [result.insertId]
+    [newId]
   );
 
-  return rows[0];
+  return result.rows[0];
 }
 
 async function getAllBusinessNotes() {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         bn.id,
@@ -49,11 +52,11 @@ async function getAllBusinessNotes() {
     `
   );
 
-  return rows;
+  return result.rows;
 }
 
 async function getBusinessNoteById(noteId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         bn.id,
@@ -65,38 +68,35 @@ async function getBusinessNoteById(noteId) {
       FROM business_notes bn
       JOIN family_members fm
         ON fm.id = bn.created_by
-      WHERE bn.id = ?
+      WHERE bn.id = $1
     `,
     [noteId]
   );
 
-  return rows[0] || null;
+  return result.rows[0] || null;
 }
 
 async function updateBusinessNote({ noteId, noteText }) {
-  const [result] = await pool.execute(
+  await pool.query(
     `
       UPDATE business_notes
-      SET note_text = ?
-      WHERE id = ?
+      SET note_text = $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
     `,
     [noteText, noteId]
   );
-
-  if (result.affectedRows === 0) {
-    return getBusinessNoteById(noteId);
-  }
 
   return getBusinessNoteById(noteId);
 }
 
 async function deleteBusinessNote(noteId) {
-  const [result] = await pool.execute(
-    "DELETE FROM business_notes WHERE id = ?",
+  const result = await pool.query(
+    "DELETE FROM business_notes WHERE id = $1",
     [noteId]
   );
 
-  return result.affectedRows > 0;
+  return result.rowCount > 0;
 }
 
 async function deleteBusinessNotes(noteIds) {
@@ -104,14 +104,19 @@ async function deleteBusinessNotes(noteIds) {
     return { deletedCount: 0, deletedIds: [] };
   }
 
-  const [result] = await pool.query(
-    "DELETE FROM business_notes WHERE id IN (?)",
-    [noteIds]
+  const validIds = noteIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (validIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [] };
+  }
+
+  const result = await pool.query(
+    "DELETE FROM business_notes WHERE id = ANY($1::bigint[])",
+    [validIds]
   );
 
   return {
-    deletedCount: result.affectedRows,
-    deletedIds: noteIds,
+    deletedCount: result.rowCount,
+    deletedIds: validIds,
   };
 }
 

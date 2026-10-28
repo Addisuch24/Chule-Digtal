@@ -2,7 +2,7 @@ const pool = require("../config/db");
 
 async function findFamilyMemberByUsername(username) {
   const normalized = username ? username.trim().toLowerCase() : "";
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         id,
@@ -15,19 +15,19 @@ async function findFamilyMemberByUsername(username) {
         created_at,
         updated_at
       FROM family_members
-      WHERE LOWER(username) = LOWER(?)
+      WHERE LOWER(username) = LOWER($1)
       LIMIT 1
     `,
     [normalized]
   );
 
-  return rows[0] || null;
+  return result.rows[0] || null;
 }
 
 async function findFamilyMemberByEmail(email) {
   if (!email) return null;
   const normalized = email.trim().toLowerCase();
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         id,
@@ -40,17 +40,17 @@ async function findFamilyMemberByEmail(email) {
         created_at,
         updated_at
       FROM family_members
-      WHERE LOWER(email) = LOWER(?)
+      WHERE LOWER(email) = LOWER($1)
       LIMIT 1
     `,
     [normalized]
   );
 
-  return rows[0] || null;
+  return result.rows[0] || null;
 }
 
 async function findFamilyMemberById(id) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         id,
@@ -62,13 +62,13 @@ async function findFamilyMemberById(id) {
         created_at,
         updated_at
       FROM family_members
-      WHERE id = ?
+      WHERE id = $1
       LIMIT 1
     `,
     [id]
   );
 
-  return rows[0] || null;
+  return result.rows[0] || null;
 }
 
 async function createFamilyMember(
@@ -78,7 +78,7 @@ async function createFamilyMember(
   username,
   passwordHash
 ) {
-  const [result] = await pool.execute(
+  const result = await pool.query(
     `
       INSERT INTO family_members
       (
@@ -89,7 +89,8 @@ async function createFamilyMember(
         password_hash,
         is_active
       )
-      VALUES (?, ?, ?, ?, ?, 1)
+      VALUES ($1, $2, $3, $4, $5, 1)
+      RETURNING id
     `,
     [
       fullName.trim(),
@@ -100,7 +101,7 @@ async function createFamilyMember(
     ]
   );
 
-  return result.insertId;
+  return result.rows[0].id;
 }
 
 module.exports = {

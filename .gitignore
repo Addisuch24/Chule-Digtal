@@ -26,3 +26,9 @@ mobile/.gradle/
 mobile/build/
 mobile/.idea/
 mobile/local.properties
+
+# Backups
+*_backup*/
+backend_backup_mariadb/
+.vercel
+.env*.local
