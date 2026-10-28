@@ -7,7 +7,8 @@ const notificationModel = require("../src/models/notificationModel");
 const socketClient = require("socket.io-client");
 const { ensureTestServerRunning, stopTestServer } = require("./test_server_helper");
 
-const JWT_SECRET = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+const { getJwtSecret } = require("../src/config/env");
+const JWT_SECRET = getJwtSecret();
 const API_BASE = "http://localhost:5000/api";
 
 function generateToken(userId, username) {
@@ -242,6 +243,21 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
     // Verify nB still exists
     const checkB = await apiRequest(`/notifications/recipient/${userBId}`, "GET", tokenB);
     assert.ok(checkB.body.data.some((item) => item.id === nB.id));
+
+    // Ownership check: User B can retrieve their own notification
+    const ownGetRes = await apiRequest(`/notifications/${nB.id}`, "GET", tokenB);
+    assert.strictEqual(ownGetRes.status, 200, "Owner must be allowed to view own notification");
+    assert.strictEqual(Number(ownGetRes.body.data.id), Number(nB.id), "Must return correct notification");
+
+    // Ownership check: User A is denied access to User B's notification
+    const crossGetRes = await apiRequest(`/notifications/${nB.id}`, "GET", tokenA);
+    assert.strictEqual(crossGetRes.status, 403, "Non-owner must be rejected with 403 Forbidden");
+    assert.strictEqual(crossGetRes.body.message, "You are not allowed to view this notification");
+
+    // Ownership check: Nonexistent notification returns 404
+    const nonExistentRes = await apiRequest("/notifications/999999999", "GET", tokenA);
+    assert.strictEqual(nonExistentRes.status, 404, "Nonexistent notification must return 404 Not Found");
+    assert.strictEqual(nonExistentRes.body.message, "Notification not found");
   });
 
   await t.test("7. Pagination works without reintroducing deleted records", async () => {

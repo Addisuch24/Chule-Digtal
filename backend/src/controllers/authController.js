@@ -36,7 +36,7 @@ async function login(req, res) {
       data: result,
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[AUTH DIAGNOSTIC] Login exception:", error.message);
 
     return res.status(500).json({
       success: false,

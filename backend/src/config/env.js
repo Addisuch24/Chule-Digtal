@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 
 const KNOWN_PLACEHOLDER_SECRET = "chule_digita_change_this_to_a_long_random_secret";
 function isPlaceholderSecret(secret) {
@@ -8,10 +8,10 @@ function isPlaceholderSecret(secret) {
 
   return (
     value === KNOWN_PLACEHOLDER_SECRET ||
+
     /replace[_ -]?with|change[_ -]?this|your[_ -]|placeholder|example[_ -]?secret|changeme|todo/i.test(value)
   );
 }
-
 /**
  * Validates that all critical environment variables are present and secure.
  * In production (NODE_ENV=production), enforces strict secret length and prohibits known placeholders.
@@ -26,15 +26,26 @@ function validateEnv() {
   if (isProduction) {
     if (!jwtSecret || jwtSecret.trim() === "") {
       errors.push("JWT_SECRET is missing or empty in production.");
-    } else if (isPlaceholderSecret(jwtSecret)) {
+    } else if (jwtSecret.trim() === KNOWN_PLACEHOLDER_SECRET) {
       errors.push("JWT_SECRET must not use the default placeholder secret in production.");
     } else if (jwtSecret.trim().length < 32) {
       errors.push("JWT_SECRET must be at least 32 characters long in production.");
     }
 
-    if (!process.env.PGHOST && !process.env.DB_HOST && !process.env.DATABASE_URL) errors.push("PGHOST, DB_HOST, or DATABASE_URL is required in production.");
-    if (!process.env.PGUSER && !process.env.DB_USER && !process.env.DATABASE_URL) errors.push("PGUSER, DB_USER, or DATABASE_URL is required in production.");
-    if (!process.env.PGDATABASE && !process.env.DB_NAME && !process.env.DATABASE_URL) errors.push("PGDATABASE, DB_NAME, or DATABASE_URL is required in production.");
+    const hasDbUrl = Boolean(
+      (process.env.DATABASE_URL && process.env.DATABASE_URL.trim()) ||
+      (process.env.SUPABASE_DB_URL && process.env.SUPABASE_DB_URL.trim())
+    );
+
+    if (!process.env.PGHOST && !process.env.DB_HOST && !hasDbUrl) {
+      errors.push("PGHOST, DB_HOST, DATABASE_URL, or SUPABASE_DB_URL is required in production.");
+    }
+    if (!process.env.PGUSER && !process.env.DB_USER && !hasDbUrl) {
+      errors.push("PGUSER, DB_USER, DATABASE_URL, or SUPABASE_DB_URL is required in production.");
+    }
+    if (!process.env.PGDATABASE && !process.env.DB_NAME && !hasDbUrl) {
+      errors.push("PGDATABASE, DB_NAME, DATABASE_URL, or SUPABASE_DB_URL is required in production.");
+    }
 
     const corsOrigin = process.env.CORS_ORIGIN;
     if (!corsOrigin || corsOrigin.trim() === "" || corsOrigin.trim() === "*") {
@@ -58,7 +69,7 @@ function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
 
   if (isProduction) {
-    if (isPlaceholderSecret(secret) || secret.trim().length < 32) {
+    if (!secret || secret.trim() === KNOWN_PLACEHOLDER_SECRET || secret.trim().length < 32) {
       throw new Error("Invalid or unconfigured JWT_SECRET in production environment");
     }
     return secret.trim();
@@ -102,5 +113,3 @@ module.exports = {
   getCorsOrigin,
   KNOWN_PLACEHOLDER_SECRET,
 };
-
-

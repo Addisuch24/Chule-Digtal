@@ -14,7 +14,10 @@ const activityRoutes = require("./routes/activityRoutes");
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const deviceRegistrationRoutes = require("./routes/deviceRegistrationRoutes");
-const { getCorsOrigin } = require("./config/env");
+const { validateEnv, getCorsOrigin } = require("./config/env");
+
+// Validate environment on application initialization
+validateEnv();
 const app = express();
 
 app.use(helmet());
@@ -60,6 +63,7 @@ app.get("/api/health/ready", async (req, res) => {
       message: "Database connection is ready",
     });
   } catch (error) {
+    console.error("[DB READINESS ERROR]", { code: error.code, message: error.message, name: error.name });
     return res.status(503).json({
       success: false,
       message: "Database dependency is unavailable",

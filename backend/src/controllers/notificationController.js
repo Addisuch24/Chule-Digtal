@@ -88,6 +88,22 @@ async function getNotificationById(req, res) {
       });
     }
 
+    const authUserId = Number(req.user?.id);
+    const recipientId = Number(notification.recipient_id);
+
+    if (
+      !Number.isInteger(authUserId) ||
+      authUserId <= 0 ||
+      !Number.isInteger(recipientId) ||
+      recipientId <= 0 ||
+      authUserId !== recipientId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to view this notification",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: notification,

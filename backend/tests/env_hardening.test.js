@@ -90,4 +90,35 @@ test("Environment & Production Hardening Suite", async (t) => {
     const origins = getCorsOrigin();
     assert.deepEqual(origins, ["https://app.chuledigital.com", "https://admin.chuledigital.com"]);
   });
+
+  await t.test("7. Production mode passes validation with DATABASE_URL alone", () => {
+    process.env.NODE_ENV = "production";
+    process.env.JWT_SECRET = "c5a939f88d2f0d927a3c3e80f948f73e0a2948bb8f2910d65a839d09c2a8b9e1";
+    delete process.env.PGHOST;
+    delete process.env.DB_HOST;
+    delete process.env.PGUSER;
+    delete process.env.DB_USER;
+    delete process.env.PGDATABASE;
+    delete process.env.DB_NAME;
+    process.env.DATABASE_URL = "postgresql://postgres:secret@aws-0-eu-west-2.pooler.supabase.com:6543/postgres";
+    process.env.CORS_ORIGIN = "https://app.chuledigital.com";
+
+    assert.doesNotThrow(() => validateEnv());
+  });
+
+  await t.test("8. Production mode passes validation with SUPABASE_DB_URL alone", () => {
+    process.env.NODE_ENV = "production";
+    process.env.JWT_SECRET = "c5a939f88d2f0d927a3c3e80f948f73e0a2948bb8f2910d65a839d09c2a8b9e1";
+    delete process.env.PGHOST;
+    delete process.env.DB_HOST;
+    delete process.env.PGUSER;
+    delete process.env.DB_USER;
+    delete process.env.PGDATABASE;
+    delete process.env.DB_NAME;
+    delete process.env.DATABASE_URL;
+    process.env.SUPABASE_DB_URL = "postgresql://postgres:secret@aws-0-eu-west-2.pooler.supabase.com:6543/postgres";
+    process.env.CORS_ORIGIN = "https://app.chuledigital.com";
+
+    assert.doesNotThrow(() => validateEnv());
+  });
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
-import socket, { connectSocket } from "../services/socket";
+import socket, { connectSocket, isSocketSupported } from "../services/socket";
 import FeedbackState from "../components/FeedbackState";
 import PageHeader from "../components/PageHeader";
 import StatusBadge from "../components/StatusBadge";
@@ -187,6 +187,28 @@ function Notifications() {
       setSelectedNotificationIds([]);
     }
 
+    function handleWindowFocus() {
+      loadNotifications(false, 1);
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadNotifications(false, 1);
+      }
+    }
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    loadNotifications(true, 1);
+
+    if (!isSocketSupported()) {
+      setSocketState("standby");
+      return () => {
+        window.removeEventListener("focus", handleWindowFocus);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
+    }
+
     socket.on("connect", handleSocketConnect);
     socket.on("disconnect", handleSocketDisconnect);
     socket.on("connect_error", handleSocketError);
@@ -196,9 +218,11 @@ function Notifications() {
     socket.on("notification:all_deleted", handleNotificationAllDeleted);
 
     connectSocket();
-    loadNotifications(true, 1);
 
     return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
       socket.off("connect", handleSocketConnect);
       socket.off("disconnect", handleSocketDisconnect);
       socket.off("connect_error", handleSocketError);
@@ -356,8 +380,14 @@ function Notifications() {
         theme="notifications"
       />
       <div className={`connection-strip connection-${socketState}`}>
-        <span className="online-dot" />
-        <span>Real-time updates are {socketState}.</span>
+        {socketState === "connected" && <span className="online-dot" />}
+        <span>
+          {socketState === "connected"
+            ? "Real-time updates active"
+            : socketState === "error"
+            ? "Live push unavailable (updates sync on navigation and focus)"
+            : "Updates sync on navigation and focus"}
+        </span>
       </div>
 
       {message && <p className="alert alert-success">{message}</p>}
