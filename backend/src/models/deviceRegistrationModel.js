@@ -18,11 +18,11 @@ async function registerDevice({
       receive_logged_out,
       last_active
     )
-    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON DUPLICATE KEY UPDATE
-      user_id = VALUES(user_id),
-      platform = VALUES(platform),
-      receive_logged_out = VALUES(receive_logged_out),
+    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+    ON CONFLICT (device_token) DO UPDATE SET
+      user_id = EXCLUDED.user_id,
+      platform = EXCLUDED.platform,
+      receive_logged_out = EXCLUDED.receive_logged_out,
       last_active = CURRENT_TIMESTAMP
   `;
 
@@ -48,11 +48,11 @@ async function disassociateUser({ deviceToken }) {
     UPDATE device_registrations
     SET user_id = NULL,
         last_active = CURRENT_TIMESTAMP
-    WHERE device_token = ?
+    WHERE device_token = $1
   `;
 
-  const [result] = await pool.query(query, [deviceToken.trim()]);
-  return result.affectedRows > 0;
+  const result = await pool.query(query, [deviceToken.trim()]);
+  return result.rowCount > 0;
 }
 
 async function unregisterDevice({ deviceToken }) {
@@ -60,11 +60,11 @@ async function unregisterDevice({ deviceToken }) {
 
   const query = `
     DELETE FROM device_registrations
-    WHERE device_token = ?
+    WHERE device_token = $1
   `;
 
-  const [result] = await pool.query(query, [deviceToken.trim()]);
-  return result.affectedRows > 0;
+  const result = await pool.query(query, [deviceToken.trim()]);
+  return result.rowCount > 0;
 }
 
 async function getDevicesForUser(userId) {
@@ -73,11 +73,11 @@ async function getDevicesForUser(userId) {
   const query = `
     SELECT device_token, platform, receive_logged_out
     FROM device_registrations
-    WHERE user_id = ?
+    WHERE user_id = $1
   `;
 
-  const [rows] = await pool.query(query, [Number(userId)]);
-  return rows;
+  const result = await pool.query(query, [Number(userId)]);
+  return result.rows;
 }
 
 async function getLoggedOutDevices() {
@@ -87,8 +87,8 @@ async function getLoggedOutDevices() {
     WHERE user_id IS NULL AND receive_logged_out = 1
   `;
 
-  const [rows] = await pool.query(query);
-  return rows;
+  const result = await pool.query(query);
+  return result.rows;
 }
 
 module.exports = {

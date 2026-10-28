@@ -14,10 +14,16 @@ const activityRoutes = require("./routes/activityRoutes");
 const authRoutes = require("./routes/authRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const deviceRegistrationRoutes = require("./routes/deviceRegistrationRoutes");
+const { getCorsOrigin } = require("./config/env");
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: getCorsOrigin(),
+    credentials: true,
+  })
+);
 app.use(compression());
 app.use(express.json());
 
@@ -47,10 +53,8 @@ app.get("/api/health", (req, res) => {
 // Readiness health check (verifies database dependency)
 app.get("/api/health/ready", async (req, res) => {
   const pool = require("./config/db");
-  let connection = null;
   try {
-    connection = await pool.getConnection();
-    await connection.query("SELECT 1");
+    await pool.query("SELECT 1");
     return res.status(200).json({
       success: true,
       message: "Database connection is ready",
@@ -60,10 +64,6 @@ app.get("/api/health/ready", async (req, res) => {
       success: false,
       message: "Database dependency is unavailable",
     });
-  } finally {
-    if (connection) {
-      connection.release();
-    }
   }
 });
 

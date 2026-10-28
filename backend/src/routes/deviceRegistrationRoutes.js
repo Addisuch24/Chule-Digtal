@@ -1,5 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const { getJwtSecret } = require("../config/env");
 const deviceRegistrationController = require("../controllers/deviceRegistrationController");
 
 const router = express.Router();
@@ -14,7 +15,7 @@ function optionalAuthenticate(req, res, next) {
   const parts = authHeader.split(" ");
   if (parts.length === 2 && parts[0] === "Bearer") {
     try {
-      const secret = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+      const secret = getJwtSecret();
       const decoded = jwt.verify(parts[1], secret);
       req.user = {
         id: decoded.id ?? decoded.userId,

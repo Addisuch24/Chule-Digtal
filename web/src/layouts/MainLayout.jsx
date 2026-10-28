@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import socket from "../services/socket";
 import "./MainLayout.css";
 
 const navigation = [
@@ -18,6 +19,7 @@ function MainLayout() {
   const userName = user?.full_name || user?.username || "Family member";
 
   function handleLogout() {
+    socket.disconnect();
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     navigate("/login", { replace: true });

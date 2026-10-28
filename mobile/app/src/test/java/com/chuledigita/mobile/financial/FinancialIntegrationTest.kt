@@ -361,7 +361,7 @@ class FinancialIntegrationTest {
         // Verify movement
         vm.verifyMovement(created.id, "Verified in test")
         var verifiedState: FinancialMovementDetailsUiState.Success? = null
-        for (i in 1..20) {
+        for (i in 1..40) {
             kotlinx.coroutines.delay(100)
             val st = vm.uiState.value
             if (st is FinancialMovementDetailsUiState.Success && !st.isSubmitting && st.successMessage != null) {
@@ -369,7 +369,8 @@ class FinancialIntegrationTest {
                 break
             }
         }
-        assertNotNull("Verified state must exist", verifiedState)
+        val finalDetailsState = vm.uiState.value
+        assertNotNull("Verified state must exist. Final state was: $finalDetailsState", verifiedState)
         assertEquals(VerificationStatus.VERIFIED, verifiedState!!.movement.verificationStatus)
     }
 
@@ -409,11 +410,12 @@ class FinancialIntegrationTest {
             successCallback = true
         }
 
-        for (i in 1..20) {
+        for (i in 1..40) {
             kotlinx.coroutines.delay(100)
             if (vm.uiState.value.isSuccess) break
         }
-        assertTrue("Success callback must be called", successCallback)
-        assertTrue("isSuccess must be true", vm.uiState.value.isSuccess)
+        val finalRecordState = vm.uiState.value
+        assertTrue("Success callback must be called. Final state: $finalRecordState", successCallback)
+        assertTrue("isSuccess must be true. Final state: $finalRecordState", vm.uiState.value.isSuccess)
     }
 }

@@ -1,20 +1,29 @@
 package com.chuledigita.mobile.data.remote
 
+import com.chuledigita.mobile.BuildConfig
+
 /**
  * Central API configuration for Chule Digital backend connection.
- * 
- * Default setup supports both Android Emulator (10.0.2.2) and physical Android devices
- * on the local Wi-Fi network (10.42.0.83 / 192.168.137.75).
+ * Supports development LAN presets as well as secure HTTPS production staging endpoints.
  */
 object ApiConfig {
     /** Default base URL for Android Emulator accessing host localhost on port 5000 */
     const val EMULATOR_BASE_URL = "http://10.0.2.2:5000/api/"
 
-    /** LAN IP address for testing on physical Android devices over local Wi-Fi / Hotspot */
-    const val LAN_BASE_URL = "http://192.168.137.176:5000/api/"
+    /** LAN IP address for testing on physical Android devices over Mobile Hotspot */
+    const val HOTSPOT_BASE_URL = "http://192.168.137.176:5000/api/"
+
+    /** LAN IP address for testing on physical Android devices over Wi-Fi */
+    const val WIFI_BASE_URL = "http://192.168.188.3:5000/api/"
+
+    /** Production / Staging API Base URL (enforces HTTPS) */
+    val PRODUCTION_BASE_URL: String = BuildConfig.PRODUCTION_API_URL
+
+    /** Default base URL: in debug mode uses local preset, in release mode uses production HTTPS */
+    val DEFAULT_BASE_URL: String = if (BuildConfig.DEBUG) HOTSPOT_BASE_URL else PRODUCTION_BASE_URL
 
     /** Centralized base URL used across the mobile application */
-    var BASE_URL: String = LAN_BASE_URL
+    var BASE_URL: String = DEFAULT_BASE_URL
 
     /** Connection timeouts in seconds */
     const val CONNECT_TIMEOUT_SECONDS = 30L
@@ -26,10 +35,15 @@ object ApiConfig {
     fun init(context: android.content.Context) {
         val prefs = context.getSharedPreferences("chule_network_prefs", android.content.Context.MODE_PRIVATE)
         val saved = prefs.getString("custom_base_url", null)
-        if (!saved.isNullOrBlank() && !saved.contains("10.232.84.204") && !saved.contains("192.168.188.3")) {
-            BASE_URL = saved
+        if (!saved.isNullOrBlank() && !saved.contains("10.232.84.204")) {
+            // In release mode with HTTPS enforced, reject insecure cleartext URLs
+            if (BuildConfig.ENFORCE_HTTPS && !saved.startsWith("https://")) {
+                BASE_URL = PRODUCTION_BASE_URL
+            } else {
+                BASE_URL = saved
+            }
         } else {
-            BASE_URL = LAN_BASE_URL
+            BASE_URL = DEFAULT_BASE_URL
         }
     }
 
@@ -39,6 +53,11 @@ object ApiConfig {
     fun updateBaseUrl(context: android.content.Context, newUrl: String) {
         val trimmed = newUrl.trim()
         val normalized = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+        // Security check: in production release builds, reject non-HTTPS URLs
+        if (BuildConfig.ENFORCE_HTTPS && !normalized.startsWith("https://")) {
+            BASE_URL = PRODUCTION_BASE_URL
+            return
+        }
         BASE_URL = normalized
         context.getSharedPreferences("chule_network_prefs", android.content.Context.MODE_PRIVATE)
             .edit()

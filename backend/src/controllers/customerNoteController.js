@@ -5,7 +5,7 @@ const customerModel = require("../models/customerModel");
 async function createCustomerNote(req, res) {
   try {
     const { customerId } = req.params;
-    const { note_text } = req.body;
+    const note_text = req.body.note_text || req.body.noteText;
     const createdBy = req.user.id;
 
     if (

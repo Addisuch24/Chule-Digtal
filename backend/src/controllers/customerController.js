@@ -6,7 +6,8 @@ const financialMovementModel = require(
 
 async function createCustomer(req, res) {
   try {
-    const { full_name, phone } = req.body;
+    const full_name = req.body.full_name || req.body.fullName;
+    const { phone } = req.body;
 
     if (!req.user || !req.user.id) {
       return res.status(401).json({

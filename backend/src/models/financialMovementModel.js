@@ -5,32 +5,33 @@ async function createFinancialMovement({
   amount,
   movementType,
   description,
-    idempotencyKey, 
+  idempotencyKey,
   referenceType,
   referenceId,
   recordedBy,
   transactionAt,
 }) {
   if (idempotencyKey) {
-  const [existingRows] = await pool.execute(
-    `
-      SELECT *
-      FROM financial_movements
-      WHERE idempotency_key = ?
-      LIMIT 1
-    `,
-    [idempotencyKey]
-  );
+    const existing = await pool.query(
+      `
+        SELECT *
+        FROM financial_movements
+        WHERE idempotency_key = $1
+        LIMIT 1
+      `,
+      [idempotencyKey]
+    );
 
-  if (existingRows.length > 0) {
-    return {
-      ...existingRows[0],
-      amount: Number(existingRows[0].amount),
-      duplicate: true,
-    };
+    if (existing.rows.length > 0) {
+      return {
+        ...existing.rows[0],
+        amount: Number(existing.rows[0].amount),
+        duplicate: true,
+      };
+    }
   }
-}
-  const [result] = await pool.execute(
+
+  const insertResult = await pool.query(
     `
       INSERT INTO financial_movements (
         customer_id,
@@ -40,9 +41,11 @@ async function createFinancialMovement({
         reference_type,
         reference_id,
         recorded_by,
-        transaction_at
+        transaction_at,
+        idempotency_key
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id
     `,
     [
       customerId,
@@ -53,10 +56,13 @@ async function createFinancialMovement({
       referenceId || null,
       recordedBy,
       transactionAt || new Date(),
+      idempotencyKey || null,
     ]
   );
 
-  const [rows] = await pool.execute(
+  const newId = insertResult.rows[0].id;
+
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -85,16 +91,16 @@ async function createFinancialMovement({
         ON recorder.id = f.recorded_by
       LEFT JOIN family_members verifier
         ON verifier.id = f.verified_by
-      WHERE f.id = ?
+      WHERE f.id = $1
     `,
-    [result.insertId]
+    [newId]
   );
 
-  return rows[0];
+  return result.rows[0];
 }
 
 async function getFinancialMovementById(movementId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -123,20 +129,20 @@ async function getFinancialMovementById(movementId) {
         ON recorder.id = f.recorded_by
       LEFT JOIN family_members verifier
         ON verifier.id = f.verified_by
-      WHERE f.id = ?
+      WHERE f.id = $1
     `,
     [movementId]
   );
 
-  if (rows.length === 0) {
+  if (result.rows.length === 0) {
     return null;
   }
 
-  return rows[0];
+  return result.rows[0];
 }
 
 async function getAllFinancialMovements() {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -169,22 +175,24 @@ async function getAllFinancialMovements() {
     `
   );
 
-  return rows;
+  return result.rows;
 }
+
 async function verifyFinancialMovement({
   movementId,
   verifiedBy,
   verificationNote,
 }) {
-  const [result] = await pool.execute(
+  const updateResult = await pool.query(
     `
       UPDATE financial_movements
       SET
         verification_status = 'VERIFIED',
-        verified_by = ?,
+        verified_by = $1,
         verified_at = CURRENT_TIMESTAMP,
-        verification_note = ?
-      WHERE id = ?
+        verification_note = $2,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
         AND verification_status = 'PENDING'
     `,
     [
@@ -194,11 +202,11 @@ async function verifyFinancialMovement({
     ]
   );
 
-  if (result.affectedRows === 0) {
+  if (updateResult.rowCount === 0) {
     return null;
   }
 
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -227,27 +235,29 @@ async function verifyFinancialMovement({
         ON recorder.id = f.recorded_by
       LEFT JOIN family_members verifier
         ON verifier.id = f.verified_by
-      WHERE f.id = ?
+      WHERE f.id = $1
     `,
     [movementId]
   );
 
-  return rows[0];
+  return result.rows[0];
 }
+
 async function rejectFinancialMovement({
   movementId,
   verifiedBy,
   verificationNote,
 }) {
-  const [result] = await pool.execute(
+  const updateResult = await pool.query(
     `
       UPDATE financial_movements
       SET
         verification_status = 'REJECTED',
-        verified_by = ?,
+        verified_by = $1,
         verified_at = CURRENT_TIMESTAMP,
-        verification_note = ?
-      WHERE id = ?
+        verification_note = $2,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
         AND verification_status = 'PENDING'
     `,
     [
@@ -257,11 +267,11 @@ async function rejectFinancialMovement({
     ]
   );
 
-  if (result.affectedRows === 0) {
+  if (updateResult.rowCount === 0) {
     return null;
   }
 
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -290,13 +300,14 @@ async function rejectFinancialMovement({
         ON recorder.id = f.recorded_by
       LEFT JOIN family_members verifier
         ON verifier.id = f.verified_by
-      WHERE f.id = ?
+      WHERE f.id = $1
     `,
     [movementId]
   );
 
-  return rows[0];
+  return result.rows[0];
 }
+
 async function updateFinancialMovement({
   movementId,
   customerId,
@@ -304,19 +315,20 @@ async function updateFinancialMovement({
   movementType,
   description,
 }) {
-  const [result] = await pool.execute(
+  const updateResult = await pool.query(
     `
       UPDATE financial_movements
       SET
-        customer_id = ?,
-        amount = ?,
-        movement_type = ?,
-        description = ?,
+        customer_id = $1,
+        amount = $2,
+        movement_type = $3,
+        description = $4,
         verification_status = 'PENDING',
         verified_by = NULL,
         verified_at = NULL,
-        verification_note = NULL
-      WHERE id = ?
+        verification_note = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $5
     `,
     [
       customerId,
@@ -327,7 +339,7 @@ async function updateFinancialMovement({
     ]
   );
 
-  if (result.affectedRows === 0) {
+  if (updateResult.rowCount === 0) {
     return null;
   }
 
@@ -335,16 +347,16 @@ async function updateFinancialMovement({
 }
 
 async function deleteFinancialMovement(movementId) {
-  const [rows] = await pool.execute(
-    "SELECT id, verification_status FROM financial_movements WHERE id = ?",
+  const rowRes = await pool.query(
+    "SELECT id, verification_status FROM financial_movements WHERE id = $1",
     [movementId]
   );
 
-  if (rows.length === 0) {
+  if (rowRes.rows.length === 0) {
     return { success: false, blocked: false, notFound: true };
   }
 
-  if (rows[0].verification_status === "VERIFIED") {
+  if (rowRes.rows[0].verification_status === "VERIFIED") {
     return {
       success: false,
       blocked: true,
@@ -352,12 +364,12 @@ async function deleteFinancialMovement(movementId) {
     };
   }
 
-  const [result] = await pool.execute(
-    "DELETE FROM financial_movements WHERE id = ?",
+  const result = await pool.query(
+    "DELETE FROM financial_movements WHERE id = $1",
     [movementId]
   );
 
-  return { success: result.affectedRows > 0, blocked: false };
+  return { success: result.rowCount > 0, blocked: false };
 }
 
 async function deleteFinancialMovements(movementIds) {
@@ -365,16 +377,21 @@ async function deleteFinancialMovements(movementIds) {
     return { deletedCount: 0, deletedIds: [], skipped: [] };
   }
 
+  const validIds = movementIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (validIds.length === 0) {
+    return { deletedCount: 0, deletedIds: [], skipped: [] };
+  }
+
   // Prevent deleting verified financial movements to preserve accounting audit accuracy
-  const [rows] = await pool.query(
-    "SELECT id, verification_status FROM financial_movements WHERE id IN (?)",
-    [movementIds]
+  const rowRes = await pool.query(
+    "SELECT id, verification_status FROM financial_movements WHERE id = ANY($1::bigint[])",
+    [validIds]
   );
 
   const eligibleIds = [];
   const skipped = [];
 
-  for (const row of rows) {
+  for (const row of rowRes.rows) {
     if (row.verification_status === "VERIFIED") {
       skipped.push({
         id: Number(row.id),
@@ -389,20 +406,20 @@ async function deleteFinancialMovements(movementIds) {
     return { deletedCount: 0, deletedIds: [], skipped };
   }
 
-  const [result] = await pool.query(
-    "DELETE FROM financial_movements WHERE id IN (?)",
+  const deleteRes = await pool.query(
+    "DELETE FROM financial_movements WHERE id = ANY($1::bigint[])",
     [eligibleIds]
   );
 
   return {
-    deletedCount: result.affectedRows,
+    deletedCount: deleteRes.rowCount,
     deletedIds: eligibleIds,
     skipped,
   };
 }
 
 async function getCustomerBalance(customerId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         COALESCE(
@@ -429,13 +446,13 @@ async function getCustomerBalance(customerId) {
           0
         ) AS total_credit
       FROM financial_movements
-      WHERE customer_id = ?
+      WHERE customer_id = $1
     `,
     [customerId]
   );
 
-  const totalDebit = Number(rows[0].total_debit);
-  const totalCredit = Number(rows[0].total_credit);
+  const totalDebit = Number(result.rows[0]?.total_debit || 0);
+  const totalCredit = Number(result.rows[0]?.total_credit || 0);
 
   return {
     customerId,
@@ -444,8 +461,9 @@ async function getCustomerBalance(customerId) {
     balance: totalCredit - totalDebit,
   };
 }
+
 async function getCustomerPayments(customerId) {
-  const [rows] = await pool.execute(
+  const result = await pool.query(
     `
       SELECT
         f.id,
@@ -474,7 +492,7 @@ async function getCustomerPayments(customerId) {
       LEFT JOIN family_members verifier
         ON verifier.id = f.verified_by
 
-      WHERE f.customer_id = ?
+      WHERE f.customer_id = $1
         AND f.movement_type = 'CREDIT'
 
       ORDER BY f.transaction_at DESC, f.id DESC
@@ -482,11 +500,12 @@ async function getCustomerPayments(customerId) {
     [customerId]
   );
 
-  return rows.map((payment) => ({
+  return result.rows.map((payment) => ({
     ...payment,
     amount: Number(payment.amount),
   }));
 }
+
 module.exports = {
   createFinancialMovement,
   getFinancialMovementById,

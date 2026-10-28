@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { getJwtSecret } = require("../config/env");
 
 function authenticateToken(req, res, next) {
   try {
@@ -21,7 +22,7 @@ function authenticateToken(req, res, next) {
     }
 
     const token = parts[1];
-    const secret = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
+    const secret = getJwtSecret();
 
     const decoded = jwt.verify(token, secret);
 

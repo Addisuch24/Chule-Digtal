@@ -21,21 +21,24 @@ async function recordActivity({
   // Get all active family members except the actor
   const pool = require("../config/db");
 
-  const [members] = await pool.execute(
+  const members = await pool.query(
     `
       SELECT id
       FROM family_members
-      WHERE is_active = TRUE
+      WHERE is_active = 1
         AND username NOT LIKE 'test_%'
         AND username NOT LIKE 'integ_test_%'
         AND username NOT LIKE 'audit_user_%'
         AND username NOT LIKE 'realtime_user_%'
-        AND id <> ?
+        AND username NOT LIKE 'ord_%'
+        AND username NOT LIKE 'debug_%'
+        AND username NOT LIKE '%test%'
+        AND id <> $1
     `,
     [actorId]
   );
 
-  const recipientIds = members.map((member) => member.id);
+  const recipientIds = members.rows.map((member) => member.id);
 
   if (recipientIds.length > 0) {
     await notificationService.sendNotificationToMembers({

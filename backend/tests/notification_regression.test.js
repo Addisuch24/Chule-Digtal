@@ -5,6 +5,7 @@ const http = require("http");
 const pool = require("../src/config/db");
 const notificationModel = require("../src/models/notificationModel");
 const socketClient = require("socket.io-client");
+const { ensureTestServerRunning, stopTestServer } = require("./test_server_helper");
 
 const JWT_SECRET = process.env.JWT_SECRET || "chule_digita_change_this_to_a_long_random_secret";
 const API_BASE = "http://localhost:5000/api";
@@ -49,30 +50,31 @@ function apiRequest(path, method = "GET", token, body = null) {
 }
 
 test("Notification Persistence & Regression Test Suite", async (t) => {
+  await ensureTestServerRunning(5000);
   // Setup two test users in family_members
   const timestamp = Date.now();
-  const [resA] = await pool.execute(
-    "INSERT INTO family_members (full_name, username, password_hash) VALUES (?, ?, ?)",
+  const resA = await pool.query(
+    "INSERT INTO family_members (full_name, username, password_hash, is_active) VALUES ($1, $2, $3, 1) RETURNING id",
     [`Test User A ${timestamp}`, `test_a_${timestamp}`, "hash"]
   );
-  const userAId = resA.insertId;
+  const userAId = resA.rows[0].id;
   const tokenA = generateToken(userAId, `test_a_${timestamp}`);
 
-  const [resB] = await pool.execute(
-    "INSERT INTO family_members (full_name, username, password_hash) VALUES (?, ?, ?)",
+  const resB = await pool.query(
+    "INSERT INTO family_members (full_name, username, password_hash, is_active) VALUES ($1, $2, $3, 1) RETURNING id",
     [`Test User B ${timestamp}`, `test_b_${timestamp}`, "hash"]
   );
-  const userBId = resB.insertId;
+  const userBId = resB.rows[0].id;
   const tokenB = generateToken(userBId, `test_b_${timestamp}`);
 
   t.after(async () => {
     try {
-      await pool.execute("DELETE FROM notifications WHERE recipient_id IN (?, ?)", [userAId, userBId]);
-      await pool.execute("DELETE FROM family_members WHERE id IN (?, ?)", [userAId, userBId]);
-      await pool.end();
+      await pool.query("DELETE FROM notifications WHERE recipient_id IN ($1, $2)", [userAId, userBId]);
+      await pool.query("DELETE FROM family_members WHERE id IN ($1, $2)", [userAId, userBId]);
     } catch (e) {
       // ignore
     }
+    await stopTestServer();
   });
 
   await t.test("1. Delete one notification and refresh: it remains deleted", async () => {
@@ -162,13 +164,25 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
       forceNew: true,
     });
 
-    const deletedEventPromise = new Promise((resolve) => {
+    const deletedEventPromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timeout waiting for notification:deleted")), 5000);
       socketB.on("notification:deleted", (payload) => {
+        clearTimeout(timer);
         resolve(payload);
       });
     });
 
-    await new Promise((resolve) => socketB.on("connect", resolve));
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timeout waiting for socket connect")), 5000);
+      socketB.on("connect", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      socketB.on("connect_error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
 
     // Device A deletes notification
     const delRes = await apiRequest(`/notifications/${n.id}`, "DELETE", tokenA);
