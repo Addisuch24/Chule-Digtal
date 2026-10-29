@@ -1,5 +1,6 @@
 package com.chuledigita.mobile.ui.screens
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -12,9 +13,11 @@ import com.chuledigita.mobile.domain.repository.CustomerRepository
 import com.chuledigita.mobile.domain.repository.FinancialRepository
 import com.chuledigita.mobile.domain.repository.NoteRepository
 import com.chuledigita.mobile.domain.repository.OrderRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -22,6 +25,8 @@ import java.util.TimeZone
 
 /**
  * ViewModel for the Dashboard, managing real overview metrics and recent records from backend.
+ * Provides foreground periodic refresh and silent lifecycle sync to keep metrics up to date
+ * even when Socket.IO is unavailable.
  */
 class DashboardViewModel(
     private val _apiService: ApiService,
@@ -37,26 +42,50 @@ class DashboardViewModel(
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
-        loadDashboard()
+        loadDashboard(isSilent = false)
+
+        // 1. Refresh whenever a real-time notification event arrives
         _notificationRepository?.let { repo ->
             viewModelScope.launch {
-                repo.realtimeEventFlow.collect {
-                    loadDashboard()
+                repo.realtimeEventFlow.collect { event ->
+                    Log.d("DashboardVM", "Real-time notification event received (${event.type}); silently refreshing dashboard")
+                    loadDashboard(isSilent = true)
                 }
             }
         }
+
+        // 2. Refresh whenever Socket.IO dashboard event arrives (for persistent socket environments)
         _socketManager?.let { sm ->
             viewModelScope.launch {
                 sm.dashboardRefreshFlow.collect {
-                    loadDashboard()
+                    Log.d("DashboardVM", "Socket dashboard refresh event received; silently refreshing dashboard")
+                    loadDashboard(isSilent = true)
+                }
+            }
+        }
+
+        // 3. Foreground periodic refresh loop: while ViewModel is active and Socket.IO is not connected,
+        // periodically refresh dashboard data so metrics stay up to date without user pull-to-refresh
+        viewModelScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                if (!isActive) break
+                val isFg = _notificationRepository?.isForeground ?: true
+                val socketActive = _socketManager?.isConnected() ?: false
+                if (isFg && !socketActive) {
+                    Log.d("DashboardVM", "Foreground periodic dashboard refresh tick triggered")
+                    loadDashboard(isSilent = true)
                 }
             }
         }
     }
 
-    fun loadDashboard() {
+    fun loadDashboard(isSilent: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = DashboardUiState.Loading
+            if (!isSilent || _uiState.value !is DashboardUiState.Success) {
+                _uiState.value = DashboardUiState.Loading
+            }
+            Log.d("DashboardVM", "Loading dashboard summary (isSilent=$isSilent)")
             try {
                 var customersCount = 0
                 var ordersCount = 0
@@ -100,6 +129,9 @@ class DashboardViewModel(
                             date = formatDisplayDate(noteDto.createdAt)
                         )
                     } ?: emptyList()
+                    Log.d("DashboardVM", "getDashboardSummary success: customers=$customersCount, orders=$ordersCount, notes=$notesCount, balance=$currentBalance")
+                } else {
+                    Log.w("DashboardVM", "getDashboardSummary HTTP error: ${response.code()}")
                 }
 
                 // Explicitly refresh global notes count to guarantee 100% freshness when refreshing dashboard
@@ -126,7 +158,14 @@ class DashboardViewModel(
                     recentOrders = recentOrders,
                     recentNotes = recentNotes
                 )
+                Log.i("DashboardVM", "Dashboard UI state successfully updated (isSilent=$isSilent)")
             } catch (e: Exception) {
+                Log.e("DashboardVM", "Exception loading dashboard (isSilent=$isSilent): ${e.message}", e)
+                if (isSilent && _uiState.value is DashboardUiState.Success) {
+                    // Do not replace successful state with error on silent background refresh
+                    Log.d("DashboardVM", "Preserving existing dashboard state after silent refresh failure")
+                    return@launch
+                }
                 // Fallback: try loading from repositories if dashboard summary fails
                 try {
                     val globalNotesResult = _noteRepository.getGlobalNotes()

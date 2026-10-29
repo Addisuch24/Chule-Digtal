@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node --test --test-concurrency=1 --test-force-exit tests/*.test.js"
+    "test": "node --test --test-concurrency=1 --test-force-exit tests/*.test.js",
+    "test:phase3": "node --test --test-force-exit tests/phase3_security_remediation.test.js",
+    "test:devreg": "node --test --test-force-exit tests/device_registration.test.js",
+    "test:env": "node --test --test-force-exit tests/env_hardening.test.js",
+    "test:order": "node --test --test-force-exit tests/order_state_and_security.test.js",
+    "test:notif": "node --test --test-force-exit tests/notification_regression.test.js"
   },
   "keywords": [],
   "author": "Addisu Hirbo",

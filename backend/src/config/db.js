@@ -1,8 +1,10 @@
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 require("dotenv").config();
 const dns = require("dns");
 dns.setDefaultResultOrder("ipv4first");
 const fs = require("fs");
-const path = require("path");
 const { Pool, types } = require("pg");
 
 // Parse PostgreSQL 64-bit integers (int8/bigint, OID 20) as JavaScript numbers
@@ -112,14 +114,14 @@ const maxConnections = process.env.PGMAX_CONNECTIONS
 
 const poolConfig = connectionString
   ? {
-      connectionString,
-      ssl: sslConfig,
-      max: maxConnections,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10000,
-    }
+    connectionString,
+    ssl: sslConfig,
+    max: maxConnections,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 30000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+  }
   : {
       host,
       port,

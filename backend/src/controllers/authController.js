@@ -102,17 +102,57 @@ async function register(req, res) {
       });
     }
 
+    const configuredInviteCode = process.env.REGISTRATION_INVITE_CODE;
+    const providedInviteCode = (
+      req.body.inviteCode ||
+      req.headers["x-invite-code"] ||
+      ""
+    ).trim();
+
+    let isActive = 0;
+
+    if (configuredInviteCode && configuredInviteCode.trim()) {
+      if (providedInviteCode) {
+        if (providedInviteCode === configuredInviteCode.trim()) {
+          isActive = 1;
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: "Invalid family invitation code",
+          });
+        }
+      } else {
+        // No invite code provided when server requires an invite code:
+        // Create account as inactive pending administrator approval
+        isActive = 0;
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      // In production without an invite code configured in env:
+      // Default to inactive so arbitrary registration cannot access family data
+      isActive = 0;
+    } else {
+      // In development/test mode without an invite code configured:
+      // Default to active so local test suites and development remain seamless
+      isActive = 1;
+    }
+
     const result = await authService.register(
       nameToUse.trim(),
       phone ? phone.trim() : null,
       emailToUse.trim(),
       username.trim(),
-      password
+      password,
+      isActive
     );
+
+    const message =
+      isActive === 1
+        ? "Family member registered successfully"
+        : "Registration received. Your account is pending administrator activation before you can sign in.";
 
     return res.status(201).json({
       success: true,
-      message: "Family member registered successfully",
+      message,
       data: result,
     });
   } catch (error) {

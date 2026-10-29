@@ -33,6 +33,10 @@ router.patch(
   "/:movementId",
   financialMovementController.updateFinancialMovement
 );
+router.put(
+  "/:movementId",
+  financialMovementController.updateFinancialMovement
+);
 router.delete(
   "/:movementId",
   financialMovementController.deleteFinancialMovement
@@ -43,8 +47,16 @@ router.patch(
   "/:movementId/verify",
   financialMovementController.verifyFinancialMovement
 );
+router.post(
+  "/:movementId/verify",
+  financialMovementController.verifyFinancialMovement
+);
 // Reject financial movement
 router.patch(
+  "/:movementId/reject",
+  financialMovementController.rejectFinancialMovement
+);
+router.post(
   "/:movementId/reject",
   financialMovementController.rejectFinancialMovement
 );

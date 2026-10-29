@@ -1,3 +1,6 @@
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 require("dotenv").config();
 
 const KNOWN_PLACEHOLDER_SECRET = "chule_digita_change_this_to_a_long_random_secret";

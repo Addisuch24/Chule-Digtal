@@ -173,4 +173,71 @@ class NotificationRepositoryTest {
         // Filter out deleted
         assertTrue("Tombstone contains deleted id", repository.deletedNotificationIds.contains("404"))
     }
+
+    @Test
+    fun testServerlessHostIsDetectedAndEntersStandby() = runBlocking {
+        assertTrue(SocketManager.isServerlessBackend("https://chule-digita-backend.vercel.app"))
+        assertTrue(SocketManager.isServerlessBackend("https://some-app.vercel.app/api/"))
+        assertFalse(SocketManager.isServerlessBackend("http://localhost:5000"))
+        assertFalse(SocketManager.isServerlessBackend("https://api.chuledigital.com/api/"))
+        assertFalse(SocketManager.isServerlessBackend("https://chule-backend.onrender.com"))
+
+        val serverlessSocketManager = SocketManager("https://chule-digita-backend.vercel.app/api/")
+        assertFalse("Socket should not be supported on Vercel serverless", serverlessSocketManager.isSocketSupported())
+    }
+
+    @Test
+    fun testAdaptivePollingLifecycleControls() = runBlocking {
+        // App enters foreground
+        repository.onAppForeground()
+        assertTrue("Repository must track foreground state", repository.isForeground)
+
+        // Evaluate adaptive polling when socket is disconnected
+        repository.evaluateAdaptivePolling()
+        assertTrue("Polling job must be active in foreground when socket is unavailable", repository.pollingJob?.isActive == true)
+
+        // App enters background
+        repository.onAppBackground()
+        assertFalse("Repository must track background state", repository.isForeground)
+        assertNull("Polling job must be stopped when app is backgrounded", repository.pollingJob)
+    }
+
+    @Test
+    fun testGsonParsingWithVariousIsReadTypes() {
+        val gson = com.google.gson.Gson()
+
+        // 1. PostgreSQL standard boolean: false
+        val jsonBooleanFalse = """{"success":true,"message":null,"data":[{"id":1,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T1","message":"M1","is_read":false,"read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedFalse = gson.fromJson(jsonBooleanFalse, NotificationListResponse::class.java)
+        assertNotNull(parsedFalse)
+        assertFalse(parsedFalse.data[0].isRead)
+
+        // 2. PostgreSQL standard boolean: true
+        val jsonBooleanTrue = """{"success":true,"message":null,"data":[{"id":2,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T2","message":"M2","is_read":true,"read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedTrue = gson.fromJson(jsonBooleanTrue, NotificationListResponse::class.java)
+        assertNotNull(parsedTrue)
+        assertTrue(parsedTrue.data[0].isRead)
+
+        // 3. Integer: 1 and 0
+        val jsonInt1 = """{"success":true,"message":null,"data":[{"id":3,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T3","message":"M3","is_read":1,"read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedInt1 = gson.fromJson(jsonInt1, NotificationListResponse::class.java)
+        assertNotNull(parsedInt1)
+        assertTrue(parsedInt1.data[0].isRead)
+
+        val jsonInt0 = """{"success":true,"message":null,"data":[{"id":4,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T4","message":"M4","is_read":0,"read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedInt0 = gson.fromJson(jsonInt0, NotificationListResponse::class.java)
+        assertNotNull(parsedInt0)
+        assertFalse(parsedInt0.data[0].isRead)
+
+        // 4. String: "true" and "false"
+        val jsonStrTrue = """{"success":true,"message":null,"data":[{"id":5,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T5","message":"M5","is_read":"true","read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedStrTrue = gson.fromJson(jsonStrTrue, NotificationListResponse::class.java)
+        assertNotNull(parsedStrTrue)
+        assertTrue(parsedStrTrue.data[0].isRead)
+
+        val jsonStrFalse = """{"success":true,"message":null,"data":[{"id":6,"recipient_id":1,"activity_id":null,"notification_type":"ORDER_CREATED","title":"T6","message":"M6","is_read":"false","read_at":null,"created_at":"2026-10-21T00:00:00Z"}]}"""
+        val parsedStrFalse = gson.fromJson(jsonStrFalse, NotificationListResponse::class.java)
+        assertNotNull(parsedStrFalse)
+        assertFalse(parsedStrFalse.data[0].isRead)
+    }
 }

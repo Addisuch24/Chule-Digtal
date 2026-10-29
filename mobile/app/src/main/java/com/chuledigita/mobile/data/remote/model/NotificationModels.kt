@@ -1,6 +1,44 @@
 package com.chuledigita.mobile.data.remote.model
 
+import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
+
+/**
+ * TypeAdapter that safely handles boolean values serialized as boolean (true/false),
+ * integer/number (1/0), string ("true"/"false"/"1"/"0"), or null.
+ */
+class BooleanLenientAdapter : TypeAdapter<Boolean>() {
+    override fun write(out: JsonWriter, value: Boolean?) {
+        if (value == null) {
+            out.nullValue()
+        } else {
+            out.value(value)
+        }
+    }
+
+    override fun read(reader: JsonReader): Boolean {
+        return when (reader.peek()) {
+            JsonToken.BOOLEAN -> reader.nextBoolean()
+            JsonToken.NUMBER -> reader.nextInt() != 0
+            JsonToken.STRING -> {
+                val str = reader.nextString().trim()
+                str.equals("true", ignoreCase = true) || str == "1"
+            }
+            JsonToken.NULL -> {
+                reader.nextNull()
+                false
+            }
+            else -> {
+                reader.skipValue()
+                false
+            }
+        }
+    }
+}
 
 /**
  * Notification DTO matching backend notifications table schema.
@@ -13,7 +51,9 @@ data class NotificationDto(
     @SerializedName("notification_type") val notificationType: String,
     val title: String,
     val message: String,
-    @SerializedName("is_read") val isRead: Int, // Backend returns 0/1 for booleans
+    @SerializedName("is_read")
+    @JsonAdapter(BooleanLenientAdapter::class)
+    val isRead: Boolean = false,
     @SerializedName("read_at") val readAt: String?,
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("entity_type") val entityType: String? = null,

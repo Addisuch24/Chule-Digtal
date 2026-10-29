@@ -5,9 +5,23 @@ const { validateEnv, getJwtSecret, getCorsOrigin, KNOWN_PLACEHOLDER_SECRET } = r
 test("Environment & Production Hardening Suite", async (t) => {
   const originalEnv = { ...process.env };
 
+  function restoreEnv() {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    for (const key of Object.keys(originalEnv)) {
+      process.env[key] = originalEnv[key];
+    }
+  }
+
   t.afterEach(() => {
-    // Restore original environment after each test
-    process.env = { ...originalEnv };
+    restoreEnv();
+  });
+
+  t.after(() => {
+    restoreEnv();
   });
 
   await t.test("1. Development mode allows fallback JWT secret without throwing", () => {

@@ -19,7 +19,7 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "PRODUCTION_API_URL", "\"https://api.chuledigital.com/api/\"")
+            buildConfigField("String", "PRODUCTION_API_URL", "\"https://chule-digita-backend.vercel.app/api/\"")
             buildConfigField("Boolean", "ENFORCE_HTTPS", "false")
         }
         release {
@@ -28,7 +28,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "PRODUCTION_API_URL", "\"https://api.chuledigital.com/api/\"")
+            buildConfigField("String", "PRODUCTION_API_URL", "\"https://chule-digita-backend.vercel.app/api/\"")
             buildConfigField("Boolean", "ENFORCE_HTTPS", "true")
 
             // Release signing configuration dynamically loaded from environment variables

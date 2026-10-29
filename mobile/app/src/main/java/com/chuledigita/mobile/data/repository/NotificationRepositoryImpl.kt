@@ -7,6 +7,7 @@ import com.chuledigita.mobile.data.remote.SocketManager
 import com.chuledigita.mobile.data.remote.model.NotificationDto
 import com.chuledigita.mobile.domain.model.NotificationItem
 import com.chuledigita.mobile.domain.model.NotificationType
+import com.chuledigita.mobile.domain.model.UserSession
 import com.chuledigita.mobile.domain.repository.NotificationRepository
 import com.chuledigita.mobile.domain.repository.SessionRepository
 import com.chuledigita.mobile.notifications.InAppNotificationManager
@@ -14,6 +15,9 @@ import com.chuledigita.mobile.notifications.SystemNotificationHelper
 import com.chuledigita.mobile.utils.DateTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,7 +32,8 @@ import org.json.JSONObject
 
 /**
  * Implementation of [NotificationRepository] that orchestrates REST API sync,
- * real-time Socket.IO events, in-app pop-up presentation, and background system notifications.
+ * real-time Socket.IO events, foreground adaptive polling fallback, in-app pop-up presentation,
+ * and background system notifications.
  */
 class NotificationRepositoryImpl(
     private val apiService: ApiService,
@@ -53,14 +58,31 @@ class NotificationRepositoryImpl(
     // Thread-safe client-side tombstone set to prevent in-flight or replayed socket events from resurrecting deleted notifications
     val deletedNotificationIds: MutableSet<String> = Collections.synchronizedSet(mutableSetOf<String>())
 
+    @Volatile
+    private var activeSession: UserSession? = null
+
+    @Volatile
+    override var isForeground: Boolean = false
+        private set
+
+    var pollingJob: Job? = null
+        private set
+
+    var pollIntervalMs: Long = 30_000L
+
     init {
         // 1. Session Lifecycle: Connect/Disconnect socket and fetch initial state
         scope.launch {
             sessionRepository.userSessionFlow.collectLatest { session ->
+                activeSession = session
                 if (session != null) {
+                    Log.d("NotificationRepo", "Session activated for user ID ${session.id} (${session.username})")
                     socketManager.connect(session.token)
                     refreshNotificationsInternal(isRecovery = false)
+                    evaluateAdaptivePolling()
                 } else {
+                    Log.d("NotificationRepo", "Session deactivated - stopping polling and socket")
+                    stopAdaptivePolling()
                     socketManager.disconnect()
                     inAppNotificationManager.clearSession()
                     deletedNotificationIds.clear()
@@ -73,8 +95,16 @@ class NotificationRepositoryImpl(
         // 2. Reconnection Sync: Refresh from server whenever socket reconnects to catch missed events
         scope.launch {
             socketManager.connectionEvents.collect { event ->
-                if (event == SocketManager.EVENT_CONNECTED) {
-                    refreshNotificationsInternal(isRecovery = true)
+                when (event) {
+                    SocketManager.EVENT_CONNECTED -> {
+                        Log.i("NotificationRepo", "Socket connected - suspending adaptive polling")
+                        stopAdaptivePolling()
+                        refreshNotificationsInternal(isRecovery = true)
+                    }
+                    SocketManager.EVENT_DISCONNECTED, SocketManager.EVENT_UNAVAILABLE -> {
+                        Log.i("NotificationRepo", "Socket event: $event - evaluating adaptive polling")
+                        evaluateAdaptivePolling()
+                    }
                 }
             }
         }
@@ -110,12 +140,17 @@ class NotificationRepositoryImpl(
 
     private suspend fun refreshNotificationsInternal(isRecovery: Boolean): Result<Unit> {
         return try {
-            val session = sessionRepository.userSessionFlow.first()
-                ?: return Result.failure(Exception("No active session"))
+            val session = activeSession ?: sessionRepository.userSessionFlow.first()
+            if (session == null) {
+                Log.w("NotificationRepo", "refreshNotificationsInternal skipped: No active session")
+                return Result.failure(Exception("No active session"))
+            }
 
+            Log.d("NotificationRepo", "Requesting notifications from server for recipientId: ${session.id} (isRecovery=$isRecovery)")
             val response = apiService.getNotifications(session.id.toLong())
             if (response.isSuccessful && response.body()?.success == true) {
                 val dtoList = response.body()?.data ?: emptyList()
+                Log.i("NotificationRepo", "Received ${dtoList.size} notifications from server")
                 val serverList = dtoList.map { it.toDomain() }
 
                 // Filter out any notifications that have been persistently deleted in this session
@@ -125,23 +160,36 @@ class NotificationRepositoryImpl(
                 val unreadRecovery = filteredList.filter { !it.isRead && !inAppNotificationManager.presentedNotificationIds.contains(it.id) }
 
                 // Update local state with authoritative list from server (removes deleted notifications)
+                val previousIds = _notifications.value.map { it.id }.toSet()
                 _notifications.value = filteredList.sortedByDescending { it.id.toLongOrNull() ?: 0L }
 
                 updateUnreadCountLocally()
 
+                // Notify feature listeners (e.g. Dashboard) of newly arrived notifications
+                val newArrivals = filteredList.filter { it.id !in previousIds }
+                if (newArrivals.isNotEmpty()) {
+                    Log.i("NotificationRepo", "Detected ${newArrivals.size} new notifications; emitting to realtimeEventFlow")
+                    for (newItem in newArrivals) {
+                        _realtimeEventFlow.tryEmit(newItem)
+                    }
+                }
+
                 // If recovering after offline/reconnect and unread items exist, present them controlled
                 if (isRecovery && unreadRecovery.isNotEmpty()) {
+                    Log.i("NotificationRepo", "Presenting ${unreadRecovery.size} unread notifications via inAppNotificationManager")
                     inAppNotificationManager.showBatchFromRecovery(unreadRecovery)
                 }
 
                 Result.success(Unit)
             } else {
-                // Do NOT wipe local notifications on non-successful response
+                val code = response.code()
+                val errorBody = response.errorBody()?.string()
+                Log.e("NotificationRepo", "Failed to fetch notifications: HTTP $code - $errorBody")
                 updateUnreadCountLocally()
-                Result.success(Unit)
+                Result.failure(Exception("HTTP $code: $errorBody"))
             }
         } catch (e: Exception) {
-            Log.w("NotificationRepo", "Failed to refresh notifications: ${e.message}")
+            Log.e("NotificationRepo", "Exception while fetching notifications: ${e.message}", e)
             // Preserve existing _notifications on error to maintain offline availability
             updateUnreadCountLocally()
             Result.failure(e)
@@ -259,7 +307,6 @@ class NotificationRepositoryImpl(
         }
     }
 
-
     override fun startRealTimeSync() {
         scope.launch {
             socketManager.notificationsFlow.collect { json ->
@@ -269,17 +316,82 @@ class NotificationRepositoryImpl(
     }
 
     override fun stopRealTimeSync() {
-        // Cleanup handled via session flow and SocketManager.disconnect()
+        stopAdaptivePolling()
+        socketManager.disconnect()
+    }
+
+    override fun onAppForeground() {
+        Log.i("NotificationRepo", "App entered foreground (onAppForeground)")
+        isForeground = true
+        evaluateAdaptivePolling()
+        scope.launch {
+            // Immediate refresh on resume to capture any updates created while backgrounded
+            Log.d("NotificationRepo", "Triggering immediate resume refresh")
+            refreshNotificationsInternal(isRecovery = true)
+        }
+    }
+
+    override fun onAppBackground() {
+        Log.i("NotificationRepo", "App entered background (onAppBackground)")
+        isForeground = false
+        stopAdaptivePolling()
+    }
+
+    @Synchronized
+    fun evaluateAdaptivePolling() {
+        val session = activeSession ?: runCatching { kotlinx.coroutines.runBlocking { sessionRepository.userSessionFlow.first() } }.getOrNull()
+        val hasSession = session != null || sessionRepository.getCachedToken() != null
+        val socketActive = socketManager.isConnected()
+        val socketSupported = socketManager.isSocketSupported()
+
+        Log.d(
+            "AdaptivePolling",
+            "evaluateAdaptivePolling -> isForeground=$isForeground, hasSession=$hasSession, socketActive=$socketActive, socketSupported=$socketSupported"
+        )
+
+        // Polling is active only in the foreground when logged in and Socket.IO is not connected
+        if (isForeground && hasSession && !socketActive) {
+            startAdaptivePolling()
+        } else {
+            stopAdaptivePolling()
+        }
+    }
+
+    @Synchronized
+    fun startAdaptivePolling() {
+        if (pollingJob?.isActive == true) {
+            Log.d("AdaptivePolling", "startAdaptivePolling skipped: job already active")
+            return
+        }
+        Log.i("AdaptivePolling", "Starting foreground adaptive polling (interval: ${pollIntervalMs}ms)")
+        pollingJob = scope.launch {
+            while (isActive && isForeground && !socketManager.isConnected()) {
+                delay(pollIntervalMs)
+                if (!isActive || !isForeground || socketManager.isConnected()) break
+                Log.d("AdaptivePolling", "Adaptive polling tick: checking for new notifications")
+                refreshNotificationsInternal(isRecovery = true)
+            }
+            Log.i("AdaptivePolling", "Foreground adaptive polling loop ended")
+        }
+    }
+
+    @Synchronized
+    fun stopAdaptivePolling() {
+        if (pollingJob != null) {
+            Log.i("AdaptivePolling", "Stopping foreground adaptive polling")
+            pollingJob?.cancel()
+            pollingJob = null
+        }
     }
 
     fun handleIncomingSocketNotification(json: JSONObject) {
         try {
             // 1. Authorization check: confirm recipient belongs to authenticated session
-            val session = kotlinx.coroutines.runBlocking { sessionRepository.userSessionFlow.first() }
+            val session = activeSession ?: runCatching { kotlinx.coroutines.runBlocking { sessionRepository.userSessionFlow.first() } }.getOrNull()
             val recipientId = json.optLong("recipient_id", json.optLong("recipientId", -1L))
             if (recipientId != -1L && session != null) {
                 if (recipientId != session.id) {
-                    Log.w("NotificationRepo", "Dropped notification for another recipient: $recipientId")
+                    Log.w("NotificationRepo", "Dropped notification for another recipient: $recipientId (active: ${session.id})")
                     return
                 }
             }
@@ -345,7 +457,7 @@ class NotificationRepositoryImpl(
             _realtimeEventFlow.tryEmit(newItem)
 
             // 6. Presentation: In-app pop-up if foreground; System notification if background
-            if (SystemNotificationHelper.isAppInForeground.get()) {
+            if (isForeground) {
                 inAppNotificationManager.showNotification(newItem)
             } else {
                 context?.let { ctx ->
@@ -353,7 +465,7 @@ class NotificationRepositoryImpl(
                 }
             }
         } catch (e: Exception) {
-            Log.e("NotificationRepo", "Error handling socket notification: ${e.message}", e)
+            Log.e("NotificationRepo", "Error processing socket notification: ${e.message}", e)
         }
     }
 
@@ -374,7 +486,7 @@ class NotificationRepositoryImpl(
             message = this.message,
             date = DateTimeUtils.formatDate(this.createdAt),
             time = DateTimeUtils.formatTime(this.createdAt),
-            isRead = this.isRead == 1,
+            isRead = this.isRead,
             type = type,
             activityId = this.activityId?.toString(),
             entityType = this.entityType,

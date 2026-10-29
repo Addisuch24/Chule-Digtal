@@ -263,7 +263,7 @@ async function updateFinancialMovement(req, res) {
       });
     }
 
-    const movement =
+    const result =
       await financialMovementModel.updateFinancialMovement({
         movementId: Number(movementId),
         customerId: Number(customerId),
@@ -272,7 +272,14 @@ async function updateFinancialMovement(req, res) {
         description,
       });
 
-    if (!movement) {
+    if (result && result.blocked) {
+      return res.status(409).json({
+        success: false,
+        message: result.reason || "Verified financial records cannot be modified",
+      });
+    }
+
+    if (!result || result.notFound || !result.data) {
       return res.status(404).json({
         success: false,
         message: "Financial movement not found",
@@ -282,7 +289,7 @@ async function updateFinancialMovement(req, res) {
     return res.status(200).json({
       success: true,
       message: "Financial movement updated successfully",
-      data: movement,
+      data: result.data,
     });
   } catch (error) {
     console.error("Update financial movement error:", error);
@@ -470,6 +477,32 @@ async function verifyFinancialMovement(req, res) {
       return res.status(400).json({
         success: false,
         message: "verificationNote is required",
+      });
+    }
+
+    // Fetch existing movement to enforce Segregation of Duties (SoD) and verify state
+    const existingMovement =
+      await financialMovementModel.getFinancialMovementById(Number(movementId));
+
+    if (!existingMovement) {
+      return res.status(404).json({
+        success: false,
+        message: "Financial movement not found",
+      });
+    }
+
+    if (existingMovement.verification_status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Financial movement is already ${existingMovement.verification_status.toLowerCase()}`,
+      });
+    }
+
+    // Segregation of Duties: The recording user cannot verify their own transaction
+    if (Number(existingMovement.recorded_by) === Number(verifiedBy)) {
+      return res.status(403).json({
+        success: false,
+        message: "Segregation of duties violation: You cannot verify a financial movement that you recorded yourself. Another active family member must verify it.",
       });
     }
 

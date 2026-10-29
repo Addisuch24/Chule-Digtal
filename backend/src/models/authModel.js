@@ -76,7 +76,8 @@ async function createFamilyMember(
   phone,
   email,
   username,
-  passwordHash
+  passwordHash,
+  isActive = 0
 ) {
   const result = await pool.query(
     `
@@ -89,7 +90,7 @@ async function createFamilyMember(
         password_hash,
         is_active
       )
-      VALUES ($1, $2, $3, $4, $5, 1)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `,
     [
@@ -98,6 +99,7 @@ async function createFamilyMember(
       email && email.trim() ? email.trim().toLowerCase() : null,
       username.trim().toLowerCase(),
       passwordHash,
+      isActive ? 1 : 0,
     ]
   );
 

@@ -2,9 +2,29 @@ const deviceRegistrationModel = require("../models/deviceRegistrationModel");
 
 async function registerDevice(req, res) {
   try {
-    const { deviceToken, platform, receiveLoggedOut } = req.body;
-    // Link to authenticated user if available, or allow explicit userId in payload, or null if logged out
-    const userId = req.user ? req.user.id : (req.body.userId || null);
+    const { deviceToken, platform, receiveLoggedOut, userId: requestedUserId } = req.body;
+
+    // Reject if user is not authenticated (defensive guard in addition to middleware)
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required to register device token",
+      });
+    }
+
+    const authenticatedUserId = Number(req.user.id);
+
+    // Reject attempts to register a token for a different user
+    if (
+      requestedUserId !== undefined &&
+      requestedUserId !== null &&
+      Number(requestedUserId) !== authenticatedUserId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot register device token for a different user",
+      });
+    }
 
     if (!deviceToken || typeof deviceToken !== "string" || !deviceToken.trim()) {
       return res.status(400).json({
@@ -15,7 +35,7 @@ async function registerDevice(req, res) {
 
     const registration = await deviceRegistrationModel.registerDevice({
       deviceToken: deviceToken.trim(),
-      userId,
+      userId: authenticatedUserId,
       platform: platform || "android",
       receiveLoggedOut: receiveLoggedOut !== false,
     });

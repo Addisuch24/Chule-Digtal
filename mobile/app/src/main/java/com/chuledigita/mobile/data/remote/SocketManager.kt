@@ -39,6 +39,24 @@ class SocketManager(private val baseUrl: String) {
         const val EVENT_CONNECTED = "connected"
         const val EVENT_DISCONNECTED = "disconnected"
         const val EVENT_RECONNECTING = "reconnecting"
+        const val EVENT_UNAVAILABLE = "unavailable"
+
+        /**
+         * Checks whether the target backend URL is a known serverless host (e.g. Vercel)
+         * where persistent WebSocket / Socket.IO connections are not supported.
+         */
+        fun isServerlessBackend(url: String): Boolean {
+            val clean = url.lowercase().trim()
+            return clean.contains(".vercel.app")
+        }
+    }
+
+    /**
+     * Checks if the configured backend supports persistent Socket.IO connections.
+     */
+    fun isSocketSupported(): Boolean {
+        val socketUrl = baseUrl.removeSuffix("api/").removeSuffix("/")
+        return !isServerlessBackend(socketUrl)
     }
 
     private fun logDebug(tag: String, message: String) {
@@ -59,18 +77,26 @@ class SocketManager(private val baseUrl: String) {
     fun connect(token: String) {
         if (socket != null) return
 
+        // Remove 'api/' suffix from base URL for socket connection if present
+        val socketUrl = baseUrl.removeSuffix("api/").removeSuffix("/")
+
+        // Guard against infinite failed connection retries on known serverless platforms (e.g. Vercel)
+        if (isServerlessBackend(socketUrl)) {
+            logDebug("SocketManager", "Target backend is a serverless host ($socketUrl); Socket.IO is unsupported. Entering standby.")
+            _connectionEvents.tryEmit(EVENT_UNAVAILABLE)
+            return
+        }
+
         try {
             val options = IO.Options.builder()
                 .setAuth(mapOf("token" to token))
                 .setForceNew(true)
                 .setReconnection(true)
-                .setReconnectionAttempts(Int.MAX_VALUE)
-                .setReconnectionDelay(1000)
-                .setReconnectionDelayMax(5000)
+                .setReconnectionAttempts(5)
+                .setReconnectionDelay(2000)
+                .setReconnectionDelayMax(10000)
                 .build()
 
-            // Remove 'api/' suffix from base URL for socket connection if present
-            val socketUrl = baseUrl.removeSuffix("api/").removeSuffix("/")
             socket = IO.socket(socketUrl, options)
 
             socket?.on(Socket.EVENT_CONNECT) {
@@ -90,6 +116,7 @@ class SocketManager(private val baseUrl: String) {
 
             socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
                 logError("SocketManager", "Connection error: ${args.firstOrNull()}")
+                _connectionEvents.tryEmit(EVENT_DISCONNECTED)
             }
 
             // Real-time notification event from verified backend contract

@@ -9,7 +9,8 @@ const { ensureTestServerRunning, stopTestServer } = require("./test_server_helpe
 
 const { getJwtSecret } = require("../src/config/env");
 const JWT_SECRET = getJwtSecret();
-const API_BASE = "http://localhost:5000/api";
+const TEST_PORT = 5055;
+const API_BASE = `http://localhost:${TEST_PORT}/api`;
 
 function generateToken(userId, username) {
   return jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: "1h" });
@@ -51,7 +52,7 @@ function apiRequest(path, method = "GET", token, body = null) {
 }
 
 test("Notification Persistence & Regression Test Suite", async (t) => {
-  await ensureTestServerRunning(5000);
+  await ensureTestServerRunning(TEST_PORT);
   // Setup two test users in family_members
   const timestamp = Date.now();
   const resA = await pool.query(
@@ -75,7 +76,6 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
     } catch (e) {
       // ignore
     }
-    await stopTestServer();
   });
 
   await t.test("1. Delete one notification and refresh: it remains deleted", async () => {
@@ -159,7 +159,7 @@ test("Notification Persistence & Regression Test Suite", async (t) => {
     });
 
     // Connect a socket client for User A (simulating Device B)
-    const socketB = socketClient("http://localhost:5000", {
+    const socketB = socketClient(`http://localhost:${TEST_PORT}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
       forceNew: true,

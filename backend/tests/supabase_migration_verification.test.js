@@ -14,7 +14,8 @@ const notificationModel = require("../src/models/notificationModel");
 const { ensureTestServerRunning, stopTestServer } = require("./test_server_helper");
 const { getJwtSecret } = require("../src/config/env");
 
-const API_BASE = "http://localhost:5000/api";
+const TEST_PORT = 5055;
+const API_BASE = `http://localhost:${TEST_PORT}/api`;
 
 async function apiRequest(path, method = "GET", body = null, token = null) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -30,7 +31,7 @@ async function apiRequest(path, method = "GET", body = null, token = null) {
 }
 
 test("Supabase PostgreSQL Migration Verification Suite", async (t) => {
-  await ensureTestServerRunning(5000);
+  await ensureTestServerRunning(TEST_PORT);
 
   const timestamp = Date.now();
   const testUsername = `migr_test_${timestamp}`;

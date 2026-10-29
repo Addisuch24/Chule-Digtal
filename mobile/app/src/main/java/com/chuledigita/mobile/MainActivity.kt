@@ -57,11 +57,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         SystemNotificationHelper.isAppInForeground.set(true)
+        (application as? ChuleApplication)?.container?.notificationRepository?.onAppForeground()
     }
 
     override fun onPause() {
         super.onPause()
         SystemNotificationHelper.isAppInForeground.set(false)
+        (application as? ChuleApplication)?.container?.notificationRepository?.onAppBackground()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

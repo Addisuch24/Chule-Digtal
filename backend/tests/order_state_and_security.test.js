@@ -4,7 +4,8 @@ const pool = require("../src/config/db");
 const orderModel = require("../src/models/orderModel");
 const { ensureTestServerRunning } = require("./test_server_helper");
 
-const API_BASE = "http://localhost:5000/api";
+const TEST_PORT = 5055;
+const API_BASE = `http://localhost:${TEST_PORT}/api`;
 
 async function apiRequest(path, method = "GET", body = null, token = null) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -26,7 +27,7 @@ test("Order State Machine, Security & Health Endpoints", async (t) => {
   const testUsername = "ord_test_" + Date.now();
 
   t.before(async () => {
-    await ensureTestServerRunning(5000);
+    await ensureTestServerRunning(TEST_PORT);
     // Register and login a test user
     const regRes = await apiRequest("/auth/register", "POST", {
       fullName: "Order Test Admin",

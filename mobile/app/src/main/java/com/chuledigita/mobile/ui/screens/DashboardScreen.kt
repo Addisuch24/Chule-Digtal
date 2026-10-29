@@ -50,7 +50,7 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
-        viewModel.loadDashboard()
+        viewModel.loadDashboard(isSilent = true)
         onPauseOrDispose { }
     }
 

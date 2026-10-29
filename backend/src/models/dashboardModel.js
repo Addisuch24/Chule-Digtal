@@ -28,28 +28,34 @@ async function getDashboardSummary(userId) {
 
   const financialSummaryRes = await pool.query(`
     SELECT
-      COALESCE(
-        SUM(
-          CASE
-            WHEN movement_type = 'DEBIT'
-              AND verification_status <> 'REJECTED'
-            THEN amount
-            ELSE 0
-          END
+      ROUND(
+        COALESCE(
+          SUM(
+            CASE
+              WHEN movement_type = 'DEBIT'
+                AND verification_status <> 'REJECTED'
+              THEN amount
+              ELSE 0
+            END
+          ),
+          0
         ),
-        0
+        2
       ) AS total_debit,
 
-      COALESCE(
-        SUM(
-          CASE
-            WHEN movement_type = 'CREDIT'
-              AND verification_status <> 'REJECTED'
-            THEN amount
-            ELSE 0
-          END
+      ROUND(
+        COALESCE(
+          SUM(
+            CASE
+              WHEN movement_type = 'CREDIT'
+                AND verification_status <> 'REJECTED'
+              THEN amount
+              ELSE 0
+            END
+          ),
+          0
         ),
-        0
+        2
       ) AS total_credit
     FROM financial_movements
   `);
@@ -211,9 +217,9 @@ async function getDashboardSummary(userId) {
   );
   const myActivityCount = myActivityCountRes.rows[0] || { total: 0 };
 
-  const totalDebit = Number(financialSummary.total_debit || 0);
-  const totalCredit = Number(financialSummary.total_credit || 0);
-  const netBalance = totalCredit - totalDebit;
+  const totalDebit = Number(Number(financialSummary.total_debit || 0).toFixed(2));
+  const totalCredit = Number(Number(financialSummary.total_credit || 0).toFixed(2));
+  const netBalance = Number((totalCredit - totalDebit).toFixed(2));
 
   return {
     myActivity: {

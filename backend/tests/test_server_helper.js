@@ -8,7 +8,7 @@ const { getJwtSecret } = require("../src/config/env");
 
 let activeServer = null;
 
-async function ensureTestServerRunning(port = 5000) {
+async function ensureTestServerRunning(port = 5055) {
   try {
     const res = await fetch(`http://localhost:${port}/api/health`);
     if (res.ok) {

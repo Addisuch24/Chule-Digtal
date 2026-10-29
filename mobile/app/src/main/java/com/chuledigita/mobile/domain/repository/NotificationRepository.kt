@@ -29,6 +29,12 @@ interface NotificationRepository {
     val inAppNotificationManager: com.chuledigita.mobile.notifications.InAppNotificationManager
 
     /**
+     * Whether the application is currently in the foreground.
+     */
+    val isForeground: Boolean
+        get() = false
+
+    /**
      * Fetches fresh notifications from the backend.
      */
     suspend fun refreshNotifications(): Result<Unit>
@@ -67,4 +73,16 @@ interface NotificationRepository {
      * Stops the real-time notification listener.
      */
     fun stopRealTimeSync()
+
+    /**
+     * Notifies the repository that the application has entered the foreground.
+     * Triggers an immediate refresh and activates adaptive polling if Socket.IO is unavailable.
+     */
+    fun onAppForeground() {}
+
+    /**
+     * Notifies the repository that the application has entered the background.
+     * Halts any active foreground polling loop to conserve battery and bandwidth.
+     */
+    fun onAppBackground() {}
 }

@@ -194,6 +194,7 @@ async function verifyFinancialMovement({
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
         AND verification_status = 'PENDING'
+        AND recorded_by <> $1
     `,
     [
       verifiedBy,
@@ -315,6 +316,23 @@ async function updateFinancialMovement({
   movementType,
   description,
 }) {
+  const rowRes = await pool.query(
+    "SELECT id, verification_status FROM financial_movements WHERE id = $1",
+    [movementId]
+  );
+
+  if (rowRes.rows.length === 0) {
+    return { success: false, blocked: false, notFound: true };
+  }
+
+  if (rowRes.rows[0].verification_status === "VERIFIED") {
+    return {
+      success: false,
+      blocked: true,
+      reason: "Verified financial records cannot be modified to preserve accounting audit accuracy",
+    };
+  }
+
   const updateResult = await pool.query(
     `
       UPDATE financial_movements
@@ -329,6 +347,7 @@ async function updateFinancialMovement({
         verification_note = NULL,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $5
+        AND verification_status <> 'VERIFIED'
     `,
     [
       customerId,
@@ -343,7 +362,8 @@ async function updateFinancialMovement({
     return null;
   }
 
-  return getFinancialMovementById(movementId);
+  const updatedRecord = await getFinancialMovementById(movementId);
+  return { success: true, blocked: false, data: updatedRecord };
 }
 
 async function deleteFinancialMovement(movementId) {
@@ -422,43 +442,76 @@ async function getCustomerBalance(customerId) {
   const result = await pool.query(
     `
       SELECT
-        COALESCE(
-          SUM(
-            CASE
-              WHEN movement_type = 'DEBIT'
-                   AND verification_status <> 'REJECTED'
-              THEN amount
-              ELSE 0
-            END
+        ROUND(
+          COALESCE(
+            SUM(
+              CASE
+                WHEN movement_type = 'DEBIT'
+                     AND verification_status <> 'REJECTED'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
           ),
-          0
+          2
         ) AS total_debit,
 
-        COALESCE(
-          SUM(
-            CASE
-              WHEN movement_type = 'CREDIT'
-                   AND verification_status <> 'REJECTED'
-              THEN amount
-              ELSE 0
-            END
+        ROUND(
+          COALESCE(
+            SUM(
+              CASE
+                WHEN movement_type = 'CREDIT'
+                     AND verification_status <> 'REJECTED'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
           ),
-          0
-        ) AS total_credit
+          2
+        ) AS total_credit,
+
+        ROUND(
+          COALESCE(
+            SUM(
+              CASE
+                WHEN movement_type = 'CREDIT'
+                     AND verification_status <> 'REJECTED'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ) -
+          COALESCE(
+            SUM(
+              CASE
+                WHEN movement_type = 'DEBIT'
+                     AND verification_status <> 'REJECTED'
+                THEN amount
+                ELSE 0
+              END
+            ),
+            0
+          ),
+          2
+        ) AS balance
       FROM financial_movements
       WHERE customer_id = $1
     `,
     [customerId]
   );
 
-  const totalDebit = Number(result.rows[0]?.total_debit || 0);
-  const totalCredit = Number(result.rows[0]?.total_credit || 0);
+  const totalDebit = Number(Number(result.rows[0]?.total_debit || 0).toFixed(2));
+  const totalCredit = Number(Number(result.rows[0]?.total_credit || 0).toFixed(2));
+  const balance = Number(Number(result.rows[0]?.balance || 0).toFixed(2));
 
   return {
     customerId,
     totalDebit,
     totalCredit,
-    balance: totalCredit - totalDebit,
+    balance,
   };
 }
 

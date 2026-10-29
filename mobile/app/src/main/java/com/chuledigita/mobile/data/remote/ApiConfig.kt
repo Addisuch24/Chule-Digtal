@@ -20,7 +20,7 @@ object ApiConfig {
     val PRODUCTION_BASE_URL: String = BuildConfig.PRODUCTION_API_URL
 
     /** Default base URL: in debug mode uses local preset, in release mode uses production HTTPS */
-    val DEFAULT_BASE_URL: String = if (BuildConfig.DEBUG) HOTSPOT_BASE_URL else PRODUCTION_BASE_URL
+    val DEFAULT_BASE_URL: String = PRODUCTION_BASE_URL
 
     /** Centralized base URL used across the mobile application */
     var BASE_URL: String = DEFAULT_BASE_URL

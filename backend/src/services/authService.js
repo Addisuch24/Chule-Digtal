@@ -62,7 +62,8 @@ async function register(
   phone,
   email,
   username,
-  password
+  password,
+  isActive = 0
 ) {
   const normalizedUsername = username.trim().toLowerCase();
   const normalizedEmail = email ? email.trim().toLowerCase() : "";
@@ -90,7 +91,8 @@ async function register(
     phone && phone.trim() ? phone.trim() : null,
     normalizedEmail || null,
     normalizedUsername,
-    passwordHash
+    passwordHash,
+    isActive
   );
 
   const createdUser = await authModel.findFamilyMemberById(userId);
