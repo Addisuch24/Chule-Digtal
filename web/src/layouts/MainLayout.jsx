@@ -5,7 +5,7 @@ import "./MainLayout.css";
 
 const navigation = [
   { to: "/dashboard", label: "Dashboard", marker: "01" },
-  { to: "/customers", label: "Notes", marker: "02" },
+  { to: "/notes", label: "Notes", marker: "02" },
   { to: "/orders", label: "Orders", marker: "03" },
   { to: "/finance", label: "Customer Balance", marker: "04" },
   { to: "/notifications", label: "Notifications", marker: "05" },

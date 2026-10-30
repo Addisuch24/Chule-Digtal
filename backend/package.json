@@ -11,7 +11,8 @@
     "test:devreg": "node --test --test-force-exit tests/device_registration.test.js",
     "test:env": "node --test --test-force-exit tests/env_hardening.test.js",
     "test:order": "node --test --test-force-exit tests/order_state_and_security.test.js",
-    "test:notif": "node --test --test-force-exit tests/notification_regression.test.js"
+    "test:notif": "node --test --test-force-exit tests/notification_regression.test.js",
+    "test:dash": "node --test --test-force-exit tests/dashboard_customer_balance.test.js"
   },
   "keywords": [],
   "author": "Addisu Hirbo",

@@ -6,8 +6,7 @@ import {
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Customers from "./pages/Customers";
-import CustomerDetails from "./pages/CustomerDetails";
+import Notes from "./pages/Notes";
 import Orders from "./pages/Orders";
 import OrderDetails from "./pages/OrderDetails";
 import Finance from "./pages/Finance";
@@ -31,13 +30,8 @@ function App() {
             />
 
             <Route
-              path="/customers"
-              element={<Customers />}
-            />
-
-            <Route
-              path="/customers/:customerId"
-              element={<CustomerDetails />}
+              path="/notes"
+              element={<Notes />}
             />
 
             <Route

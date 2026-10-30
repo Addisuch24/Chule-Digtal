@@ -15,7 +15,7 @@ function noteHeading(noteText) {
   return noteText.trim().split(/\r?\n/, 1)[0] || "Untitled note";
 }
 
-function Customers() {
+function Notes() {
   const [notes, setNotes] = useState([]);
   const [noteText, setNoteText] = useState("");
   const [search, setSearch] = useState("");
@@ -483,4 +483,5 @@ function Customers() {
   );
 }
 
-export default Customers;
+export default Notes;
+

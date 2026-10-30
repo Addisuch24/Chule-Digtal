@@ -1,32 +1,89 @@
 const pool = require("../config/db");
 
-async function getDashboardSummary(userId) {
-  const customerCountRes = await pool.query(`
-    SELECT COUNT(DISTINCT LOWER(TRIM(full_name))) AS total
-    FROM customers
-  `);
-  const customerCount = customerCountRes.rows[0] || { total: 0 };
+async function getDashboardSummary(userId, db = pool) {
+  const customerSummaryRes = await db.query(`
+    SELECT
+      COUNT(*) AS total,
+      COALESCE(
+        SUM(
+          CASE
+            WHEN balance < 0 THEN 1
+            ELSE 0
+          END
+        ),
+        0
+      ) AS customers_with_debt,
 
-  const totalOrdersRes = await pool.query(`
+      COALESCE(
+        SUM(
+          CASE
+            WHEN balance = 0 THEN 1
+            ELSE 0
+          END
+        ),
+        0
+      ) AS settled_customers,
+
+      COALESCE(
+        SUM(
+          CASE
+            WHEN balance > 0 THEN 1
+            ELSE 0
+          END
+        ),
+        0
+      ) AS customers_with_credit
+    FROM (
+      SELECT
+        c.id,
+        ROUND(
+          COALESCE(
+            SUM(
+              CASE
+                WHEN fm.movement_type = 'CREDIT'
+                  AND fm.verification_status <> 'REJECTED'
+                THEN fm.amount
+
+                WHEN fm.movement_type = 'DEBIT'
+                  AND fm.verification_status <> 'REJECTED'
+                THEN -fm.amount
+
+                ELSE 0
+              END
+            ),
+            0
+          ),
+          2
+        ) AS balance
+      FROM customers c
+      JOIN financial_movements fm
+        ON fm.customer_id = c.id
+       AND fm.verification_status <> 'REJECTED'
+      GROUP BY c.id
+    ) AS customer_balances
+  `);
+  const customerSummary = customerSummaryRes.rows[0] || {};
+
+  const totalOrdersRes = await db.query(`
     SELECT COUNT(*) AS total
     FROM orders
   `);
   const totalOrders = totalOrdersRes.rows[0] || { total: 0 };
 
-  const totalNotesRes = await pool.query(`
+  const totalNotesRes = await db.query(`
     SELECT COUNT(*) AS total
     FROM business_notes
   `);
   const totalNotes = totalNotesRes.rows[0] || { total: 0 };
 
-  const pendingFinancialMovementsRes = await pool.query(`
+  const pendingFinancialMovementsRes = await db.query(`
     SELECT COUNT(*) AS total
     FROM financial_movements
     WHERE verification_status = 'PENDING'
   `);
   const pendingFinancialMovements = pendingFinancialMovementsRes.rows[0] || { total: 0 };
 
-  const financialSummaryRes = await pool.query(`
+  const financialSummaryRes = await db.query(`
     SELECT
       ROUND(
         COALESCE(
@@ -61,56 +118,8 @@ async function getDashboardSummary(userId) {
   `);
   const financialSummary = financialSummaryRes.rows[0] || { total_debit: 0, total_credit: 0 };
 
-  const customerBalanceSummaryRes = await pool.query(`
-    SELECT
-      SUM(
-        CASE
-          WHEN balance < 0 THEN 1
-          ELSE 0
-        END
-      ) AS customers_with_debt,
 
-      SUM(
-        CASE
-          WHEN balance = 0 THEN 1
-          ELSE 0
-        END
-      ) AS settled_customers,
-
-      SUM(
-        CASE
-          WHEN balance > 0 THEN 1
-          ELSE 0
-        END
-      ) AS customers_with_credit
-    FROM (
-      SELECT
-        LOWER(TRIM(c.full_name)) AS normalized_name,
-        COALESCE(
-          SUM(
-            CASE
-              WHEN fm.movement_type = 'CREDIT'
-                AND fm.verification_status <> 'REJECTED'
-              THEN fm.amount
-
-              WHEN fm.movement_type = 'DEBIT'
-                AND fm.verification_status <> 'REJECTED'
-              THEN -fm.amount
-
-              ELSE 0
-            END
-          ),
-          0
-        ) AS balance
-      FROM customers c
-      LEFT JOIN financial_movements fm
-        ON fm.customer_id = c.id
-      GROUP BY LOWER(TRIM(c.full_name))
-    ) AS customer_balances
-  `);
-  const customerBalanceSummary = customerBalanceSummaryRes.rows[0] || {};
-
-  const orderStatusRes = await pool.query(`
+  const orderStatusRes = await db.query(`
     SELECT order_status, COUNT(*) AS total
     FROM orders
     GROUP BY order_status
@@ -130,14 +139,14 @@ async function getDashboardSummary(userId) {
     }
   });
 
-  const recentOrdersRes = await pool.query(`
+  const recentOrdersRes = await db.query(`
     SELECT COUNT(*) AS total
     FROM orders
     WHERE created_at >= NOW() - INTERVAL '7 days'
   `);
   const recentOrders = recentOrdersRes.rows[0] || { total: 0 };
 
-  const recentPaymentsRes = await pool.query(`
+  const recentPaymentsRes = await db.query(`
     SELECT COUNT(*) AS total
     FROM financial_movements
     WHERE movement_type = 'CREDIT'
@@ -145,7 +154,7 @@ async function getDashboardSummary(userId) {
   `);
   const recentPayments = recentPaymentsRes.rows[0] || { total: 0 };
 
-  const unreadNotificationsRes = await pool.query(
+  const unreadNotificationsRes = await db.query(
     `
       SELECT COUNT(*) AS total
       FROM notifications
@@ -156,7 +165,7 @@ async function getDashboardSummary(userId) {
   );
   const unreadNotifications = unreadNotificationsRes.rows[0] || { total: 0 };
 
-  const recentActivitiesRes = await pool.query(`
+  const recentActivitiesRes = await db.query(`
     SELECT
       a.id,
       a.actor_id,
@@ -177,7 +186,7 @@ async function getDashboardSummary(userId) {
     LIMIT 10
   `);
 
-  const recentOrdersListRes = await pool.query(`
+  const recentOrdersListRes = await db.query(`
     SELECT
       o.id,
       o.customer_id,
@@ -192,7 +201,7 @@ async function getDashboardSummary(userId) {
     LIMIT 10
   `);
 
-  const recentNotesListRes = await pool.query(`
+  const recentNotesListRes = await db.query(`
     SELECT
       bn.id,
       bn.note_text,
@@ -207,7 +216,7 @@ async function getDashboardSummary(userId) {
     LIMIT 8
   `);
 
-  const myActivityCountRes = await pool.query(
+  const myActivityCountRes = await db.query(
     `
       SELECT COUNT(*) AS total
       FROM activities
@@ -226,11 +235,11 @@ async function getDashboardSummary(userId) {
       total: Number(myActivityCount.total || 0),
     },
     customers: {
-      total: Number(customerCount.total || 0),
-      withDebt: Number(customerBalanceSummary.customers_with_debt || 0),
-      withBalance: Number(customerBalanceSummary.customers_with_debt || 0) + Number(customerBalanceSummary.customers_with_credit || 0),
-      settled: Number(customerBalanceSummary.settled_customers || 0),
-      withCredit: Number(customerBalanceSummary.customers_with_credit || 0),
+      total: Number(customerSummary.total || 0),
+      withDebt: Number(customerSummary.customers_with_debt || 0),
+      withBalance: Number(customerSummary.customers_with_debt || 0) + Number(customerSummary.customers_with_credit || 0),
+      settled: Number(customerSummary.settled_customers || 0),
+      withCredit: Number(customerSummary.customers_with_credit || 0),
     },
     orders: {
       total: Number(totalOrders.total || 0),

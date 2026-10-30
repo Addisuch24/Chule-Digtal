@@ -119,7 +119,7 @@ function Dashboard() {
         theme="dashboard"
       />
       <div className="metric-grid dashboard-metrics">
-        <Link className="metric-card dashboard-metric-link" to="/customers">
+        <Link className="metric-card dashboard-metric-link" to="/notes">
           <span>Shared notes</span>
           <strong>{notes.total || 0}</strong>
           <small>Open your notes</small>
@@ -200,14 +200,14 @@ function Dashboard() {
               <p className="eyebrow">Shared notebook</p>
               <h2>Recent notes</h2>
             </div>
-            <Link to="/customers">View all</Link>
+            <Link to="/notes">View all</Link>
           </div>
           {recentNotes.length === 0 ? (
             <FeedbackState
               title="No notes yet"
               message="Your shared notes will appear here."
               action={
-                <Link className="button button-secondary" to="/customers">
+                <Link className="button button-secondary" to="/notes">
                   Open notes
                 </Link>
               }
@@ -216,7 +216,7 @@ function Dashboard() {
             recentNotes.map((note) => (
               <Link
                 className="list-row dashboard-record-row"
-                to="/customers"
+                to="/notes"
                 key={note.id}
               >
                 <div>
